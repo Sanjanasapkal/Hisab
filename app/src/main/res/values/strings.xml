@@ -1,0 +1,64 @@
+<resources>
+    <string name="app_name">Hisab</string>
+    <string name="app_tagline">Your personal money notebook</string>
+
+    <!-- Dashboard Strings -->
+    <string name="dashboard_summary_title">Financial Overview</string>
+    <string name="others_owe_me">You will get</string>
+    <string name="i_owe_others">You will give</string>
+    <string name="net_balance">Net Balance</string>
+    <string name="people_heading">Your People</string>
+    <string name="search_hint">Search by name…</string>
+    <string name="add_person">Add Person</string>
+    <string name="add_first_person">Add your first person</string>
+    <string name="empty_people_title">Your Hisab starts here</string>
+    <string name="empty_people_subtitle">Add a person to record your first transaction.</string>
+
+    <!-- Person Dialog Strings -->
+    <string name="add_person_title">Add New Person</string>
+    <string name="person_name_hint">Person\'s Name</string>
+    <string name="person_name_empty_error">Name cannot be empty</string>
+    <string name="person_name_duplicate_error">A person with this name already exists</string>
+    <string name="btn_save">Save</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_confirm">Confirm</string>
+
+    <!-- Account Details Strings -->
+    <string name="current_balance_label">Current Balance</string>
+    <string name="btn_add_transaction">Add Transaction</string>
+    <string name="btn_settle_hisab">Settle Hisab</string>
+    <string name="btn_view_history">View History</string>
+    <string name="current_transactions">Current Transactions</string>
+    <string name="empty_transactions_title">No transactions yet</string>
+    <string name="empty_transactions_subtitle">Tap “Add Transaction” to record money given or received.</string>
+
+    <!-- Transaction Form Strings -->
+    <string name="title_add_transaction">Add Transaction</string>
+    <string name="transaction_for">Recording Hisab for %1$s</string>
+    <string name="transaction_type_label">Transaction Type</string>
+    <string name="type_they_owe_me">They owe me (+)</string>
+    <string name="type_i_owe_them">I owe them (-)</string>
+    <string name="type_payment_received">Payment received (-)</string>
+    <string name="type_payment_made">Payment made (+)</string>
+    <string name="amount_hint">Amount (₹)</string>
+    <string name="reason_hint">Reason (e.g., Lunch, Movie, Books)</string>
+    <string name="notes_hint">Notes (Optional)</string>
+    <string name="date_label">Date</string>
+    <string name="error_invalid_amount">Please enter a valid amount greater than 0</string>
+    <string name="error_empty_reason">Please enter a reason or description</string>
+
+    <!-- Settlement Strings -->
+    <string name="settle_title">Settle &amp; Clear Hisab</string>
+    <string name="settle_confirmation_msg">Are you sure you want to mark this balance as settled? This will close the current accounting period and reset the active balance to ₹0. All previous transactions will remain preserved in History.</string>
+    <string name="settlement_note_hint">Settlement note (e.g. Paid via UPI, Cash)</string>
+    <string name="confirm_settle_btn">Mark as Settled</string>
+    <string name="settled_success">Account settled successfully</string>
+
+    <!-- History Strings -->
+    <string name="title_history">Transaction History</string>
+    <string name="history_empty_title">No history found</string>
+    <string name="history_empty_subtitle">Settled periods and past transactions will appear here.</string>
+    <string name="period_current">Current Active Period</string>
+    <string name="period_settled_on">Settled on %1$s</string>
+    <string name="period_final_balance">Final Balance: %1$s</string>
+</resources>

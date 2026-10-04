@@ -1,0 +1,12 @@
+{
+  "name": "hisab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hisab - Personal Finance & Digital Ledger System",
+  "scripts": {
+    "dev": "npm --prefix backend run dev",
+    "start": "npm --prefix backend start",
+    "test": "npm --prefix backend test",
+    "test:email": "npm --prefix backend run test:email"
+  }
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext HTTP connections for local development API,
+         including Android emulator (10.0.2.2), localhost, and LAN IPv4 addresses
+         (e.g., 192.168.x.x, 10.x.x.x) used when testing on physical devices.
+         Android's <domain> element does not match direct IP addresses,
+         so <base-config> must permit cleartext for local development testing. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+
