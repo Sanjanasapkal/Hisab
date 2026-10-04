@@ -222,14 +222,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Menu options dialog: About User, Backend Server URL, Log Out.
+     * Menu options dialog: About User, Log Out.
      */
     private fun showOptionsMenuDialog() {
         val displayName = sessionManager.getUserDisplayName()
-        val currentUrl = ApiClient.getBaseUrl(this)
         val options = arrayOf(
             "About User ($displayName)",
-            "Backend Server URL ($currentUrl)",
             "Log Out ($displayName)"
         )
 
@@ -238,8 +236,7 @@ class MainActivity : AppCompatActivity() {
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showAboutUserDialog()
-                    1 -> showServerSettingsDialog()
-                    2 -> confirmLogout()
+                    1 -> confirmLogout()
                 }
             }
             .setNegativeButton("Close", null)
@@ -249,57 +246,17 @@ class MainActivity : AppCompatActivity() {
     private fun showAboutUserDialog() {
         val displayName = sessionManager.getUserDisplayName()
         val email = sessionManager.getUserEmail() ?: "Not available"
-        val currentUrl = ApiClient.getBaseUrl(this)
 
         AlertDialog.Builder(this)
-            .setTitle("About User")
+            .setTitle("Account Profile")
             .setMessage(
                 "Name: $displayName\n" +
                 "Email: $email\n\n" +
                 "Cloud Sync: Automatic (MongoDB Atlas)\n" +
-                "Backend Server: $currentUrl\n" +
+                "Backend: Cloud Live (Render)\n" +
                 "Account Status: Active & Secured"
             )
             .setPositiveButton("OK", null)
-            .show()
-    }
-
-    private fun showServerSettingsDialog() {
-        val currentUrl = ApiClient.getBaseUrl(this)
-        val container = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(48, 24, 48, 0)
-        }
-
-        val input = android.widget.EditText(this).apply {
-            setText(currentUrl)
-            hint = "http://192.168.10.129:5000/"
-            setSingleLine()
-            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
-        }
-        container.addView(input)
-
-        val hintText = android.widget.TextView(this).apply {
-            text = "Presets:\n• Current Server: $currentUrl\n• Android Emulator: http://10.0.2.2:5000/\n• USB Cable (adb reverse): http://127.0.0.1:5000/\n\nNote: Always specify port :5000"
-            textSize = 12f
-            setPadding(0, 16, 0, 0)
-            setTextColor(getColor(R.color.secondary_text))
-        }
-        container.addView(hintText)
-
-        AlertDialog.Builder(this)
-            .setTitle("Backend Server URL")
-            .setMessage("Configure backend server URL:")
-            .setView(container)
-            .setPositiveButton("Save") { _, _ ->
-                val newUrl = input.text.toString().trim()
-                if (newUrl.isNotEmpty()) {
-                    ApiClient.setBaseUrl(this, newUrl)
-                    Toast.makeText(this, "API URL saved: ${ApiClient.getBaseUrl(this)}", Toast.LENGTH_SHORT).show()
-                    triggerSilentSync()
-                }
-            }
-            .setNegativeButton("Cancel", null)
             .show()
     }
 

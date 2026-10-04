@@ -52,17 +52,6 @@
                     android:textColor="#A7D3C6"
                     android:textSize="14sp" />
             </LinearLayout>
-
-            <!-- API Server Settings Button -->
-            <ImageButton
-                android:id="@+id/btnServerSettings"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="top|end"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Server URL settings"
-                android:src="@drawable/ic_edit"
-                app:tint="#A7D3C6" />
         </FrameLayout>
 
         <!-- Form Card Section -->

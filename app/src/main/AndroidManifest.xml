@@ -18,18 +18,24 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Hisab">
 
-        <!-- Screen 1: Home Dashboard -->
+        <!-- Launch Splash Screen with Hisab Logo -->
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.Hisab"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.Hisab">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Screen 1: Home Dashboard -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Hisab"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- Authentication Screens -->
         <activity

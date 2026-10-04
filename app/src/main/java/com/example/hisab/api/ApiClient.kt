@@ -18,12 +18,12 @@ import java.util.concurrent.TimeUnit
 object ApiClient {
 
     /**
-     * Default URL for Android Emulator reaching development machine:
-     * 10.0.2.2 maps to the host machine's 127.0.0.1
+     * Permanent Production Cloud Backend URL on Render:
      */
-    const val DEFAULT_EMULATOR_BASE_URL = "http://10.0.2.2:5000/"
+    const val PRODUCTION_BASE_URL = "https://hisab-zovn.onrender.com/"
+    const val DEFAULT_EMULATOR_BASE_URL = PRODUCTION_BASE_URL
 
-    private var cachedBaseUrl: String? = null
+    private var cachedBaseUrl: String? = PRODUCTION_BASE_URL
     private var apiService: HisabApiService? = null
 
     /**

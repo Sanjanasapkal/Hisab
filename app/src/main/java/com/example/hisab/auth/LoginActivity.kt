@@ -68,10 +68,6 @@ class LoginActivity : AppCompatActivity() {
         binding.tvForgotPassword.setOnClickListener {
             startActivity(Intent(this, ForgotPasswordActivity::class.java))
         }
-
-        binding.btnServerSettings.setOnClickListener {
-            showServerSettingsDialog()
-        }
     }
 
     private fun handleLogin() {
@@ -168,13 +164,9 @@ class LoginActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     setLoading(false)
-                    val activeUrl = ApiClient.getBaseUrl(this@LoginActivity)
-                    val errorMsg = "Cannot connect to server at $activeUrl\n(${e.localizedMessage})\n\n👉 Tap here or the gear icon above to update your backend URL."
-                    binding.tvErrorMessage.text = errorMsg
+                    binding.tvErrorMessage.text = "Unable to connect to Hisab Cloud. Please check your internet connection and try again."
                     binding.tvErrorMessage.visibility = View.VISIBLE
-                    binding.tvErrorMessage.setOnClickListener {
-                        showServerSettingsDialog()
-                    }
+                    binding.tvErrorMessage.setOnClickListener(null)
                 }
             }
         }
@@ -183,49 +175,5 @@ class LoginActivity : AppCompatActivity() {
     private fun setLoading(loading: Boolean) {
         binding.btnLogin.isEnabled = !loading
         binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
-    }
-
-    private fun showServerSettingsDialog() {
-        val currentUrl = ApiClient.getBaseUrl(this)
-        val container = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(48, 24, 48, 0)
-        }
-
-        val input = EditText(this).apply {
-            setText(currentUrl)
-            hint = "http://10.86.189.171:5000/"
-            setSingleLine()
-            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
-        }
-        container.addView(input)
-
-        val hintText = TextView(this).apply {
-            text = "Presets (tap button below to use):\n• Physical Phone (Wi-Fi): http://10.86.189.171:5000/\n• Android Emulator: http://10.0.2.2:5000/\n• USB Cable (adb reverse): http://127.0.0.1:5000/\n\nNote: Always specify port :5000"
-            textSize = 12f
-            setPadding(0, 16, 0, 0)
-            setTextColor(getColor(R.color.secondary_text))
-        }
-        container.addView(hintText)
-
-        AlertDialog.Builder(this)
-            .setTitle("Backend API URL")
-            .setMessage("Set the backend URL for your network:")
-            .setView(container)
-            .setPositiveButton("Save") { _, _ ->
-                val newUrl = input.text.toString().trim()
-                if (newUrl.isNotEmpty()) {
-                    ApiClient.setBaseUrl(this, newUrl)
-                    binding.tvErrorMessage.visibility = View.GONE
-                    Toast.makeText(this, "API URL saved: ${ApiClient.getBaseUrl(this)}", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNeutralButton("Use 10.86.189.171:5000") { _, _ ->
-                ApiClient.setBaseUrl(this, "http://10.86.189.171:5000/")
-                binding.tvErrorMessage.visibility = View.GONE
-                Toast.makeText(this, "API URL saved: http://10.86.189.171:5000/", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 }

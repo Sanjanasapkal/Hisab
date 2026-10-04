@@ -85,10 +85,15 @@ class SessionManager private constructor(context: Context) {
     }
 
     /**
-     * Retrieves the saved backend base URL, defaulting to emulator URL (http://10.0.2.2:5000/).
+     * Retrieves the backend base URL, defaulting to the production cloud URL (https://hisab-zovn.onrender.com/).
      */
     fun getBaseUrl(): String {
-        return prefs.getString(KEY_BASE_URL, null) ?: ApiClient.DEFAULT_EMULATOR_BASE_URL
+        val saved = prefs.getString(KEY_BASE_URL, null)
+        if (saved.isNullOrBlank() || saved.contains("192.168.") || saved.contains("10.86.") || saved.contains("10.0.2.2") || saved.contains("127.0.0.1")) {
+            setBaseUrl(ApiClient.PRODUCTION_BASE_URL)
+            return ApiClient.PRODUCTION_BASE_URL
+        }
+        return saved
     }
 
     /**
