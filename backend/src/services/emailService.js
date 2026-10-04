@@ -525,19 +525,24 @@ async function sendUsernameRecovery(email, username) {
 }
 
 /**
- * Sends a Password Reset Link Email.
+ * Sends a Password Reset Code Email.
+ * Delivers the 6-digit reset code to enter in the Hisab mobile app.
+ * Does NOT contain any web URL or external link; resets are performed inside the mobile app only.
  */
-async function sendPasswordResetLink(email, username, resetUrl, resetCode) {
+async function sendPasswordResetLink(email, username, resetUrlOrCode, resetCode) {
     if (!email || typeof email !== 'string') {
         throw new Error('Recipient email is required.');
     }
-    if (!resetUrl || typeof resetUrl !== 'string') {
-        throw new Error('Reset URL is required.');
+
+    // Extract the 6-digit code whether passed as direct code or inside a URL
+    let code = resetCode || '';
+    if (!code && typeof resetUrlOrCode === 'string') {
+        const tokenMatch = resetUrlOrCode.match(/[?&]token=([^&]+)/);
+        code = tokenMatch ? tokenMatch[1] : resetUrlOrCode;
     }
 
-    const code = resetCode || (resetUrl.match(/[?&]token=([^&]+)/)?.[1]) || '';
     const safeUsername = escapeHtml(username || 'Hisab User');
-    const safeResetUrl = escapeHtml(resetUrl);
+    const safeEmail = escapeHtml(email);
     const safeCode = escapeHtml(code);
 
     const htmlContent = `
@@ -546,7 +551,7 @@ async function sendPasswordResetLink(email, username, resetUrl, resetCode) {
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Reset Your Hisab Password</title>
+        <title>Hisab Password Reset Code</title>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F7F8FA; margin: 0; padding: 24px; color: #202522; }
             .container { max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; border: 1px solid #E6E9EC; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
@@ -556,7 +561,6 @@ async function sendPasswordResetLink(email, username, resetUrl, resetCode) {
             .content { padding: 32px 24px; }
             .otp-box { background: #E1EDE9; border: 2px dashed #1F6B57; border-radius: 10px; padding: 18px; text-align: center; margin: 20px 0; }
             .otp-code { font-size: 34px; font-weight: 800; letter-spacing: 6px; color: #1F6B57; margin: 0; font-family: 'Courier New', Courier, monospace; }
-            .btn-reset { display: inline-block; background-color: #1F6B57; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; margin: 16px 0; text-align: center; }
             .notice-box { background: #F3F4F6; border-radius: 8px; padding: 14px 16px; margin: 20px 0; font-size: 13px; color: #4B5563; line-height: 1.5; }
             .footer { background: #F7F8FA; padding: 18px 24px; text-align: center; font-size: 12px; color: #9CA3AF; border-top: 1px solid #E6E9EC; }
         </style>
@@ -568,43 +572,30 @@ async function sendPasswordResetLink(email, username, resetUrl, resetCode) {
                 <p>Personal Finance &amp; Digital Ledger System</p>
             </div>
             <div class="content">
-                <h2 style="font-size: 18px; margin-top: 0; color: #183B35;">Reset Password</h2>
+                <h2 style="font-size: 18px; margin-top: 0; color: #183B35;">Password Reset Code</h2>
                 <p>Hello <strong>${safeUsername}</strong>,</p>
-                <p style="color: #4B5563; line-height: 1.5;">We received a request to reset the password for your Hisab account.</p>
+                <p style="color: #4B5563; line-height: 1.5;">We received a request to reset the password for your Hisab account (<strong>${safeEmail}</strong>).</p>
                 
-                ${safeCode ? `
                 <p style="font-size: 14px; font-weight: 600; color: #183B35; margin-bottom: 6px;">Your 6-Digit Password Reset Code:</p>
                 <div class="otp-box">
                     <div class="otp-code">${safeCode}</div>
                 </div>
-                <p style="font-size: 13px; color: #4B5563; line-height: 1.5; margin-top: -8px; margin-bottom: 24px;">
-                    📱 <strong>In the Hisab mobile app:</strong> Enter this 6-digit code on the Reset Password screen along with your new password.
-                </p>
-                ` : ''}
 
-                <div style="text-align: center; margin: 20px 0;">
-                    <a href="${safeResetUrl}" class="btn-reset" target="_blank" rel="noopener noreferrer">Reset Password</a>
-                </div>
-                
-                <p style="font-size: 12px; color: #6B7280; line-height: 1.5;">
-                    Or open this link directly in your browser:<br>
-                    <a href="${safeResetUrl}" style="color: #1F6B57; word-break: break-all;">${safeResetUrl}</a>
-                </p>
-                
                 <div class="notice-box">
-                    ⏰ <strong>This code/link expires in 15 minutes</strong> and can only be used once.<br>
+                    📱 <strong>Reset in Hisab App:</strong> Open the Hisab mobile app and enter this 6-digit code on the Reset Password screen along with your new password.<br><br>
+                    ⏰ <strong>Expires in 15 minutes:</strong> This code can only be used once.<br><br>
                     🔒 If you did not request a password reset, you can safely ignore this email. Your existing password will remain unchanged.
                 </div>
             </div>
             <div class="footer">
-                &copy; ${new Date().getFullYear()} Hisab Support Team.
+                &copy; ${new Date().getFullYear()} Hisab Project. Secure Ledger Management.
             </div>
         </div>
     </body>
     </html>
     `;
 
-    const textContent = `Hello ${username || 'User'},\n\nWe received a request to reset the password for your Hisab account.\n\nYOUR PASSWORD RESET CODE: ${code}\n\nEnter this code in the Hisab mobile app to reset your password.\n\nAlternatively, open this link in your browser:\n${resetUrl}\n\nThis code expires in 15 minutes and can only be used once.\n\nIf you did not request this, please ignore this email.\n\nHisab Support`;
+    const textContent = `Hello ${username || 'User'},\n\nWe received a request to reset the password for your Hisab account (${email}).\n\nYOUR 6-DIGIT PASSWORD RESET CODE: ${code}\n\nOpen the Hisab mobile app and enter this 6-digit code on the Reset Password screen along with your new password.\n\nThis code expires in 15 minutes and can only be used once.\n\nIf you did not request this, please ignore this email.\n\nHisab Support`;
 
     return await deliverEmail({
         to: email,
@@ -612,9 +603,9 @@ async function sendPasswordResetLink(email, username, resetUrl, resetCode) {
         html: htmlContent,
         text: textContent,
         devMeta: {
-            title: 'Password Reset Link Delivery',
+            title: 'Password Reset Code Delivery',
             username,
-            resetUrl,
+            email,
             otp: code
         }
     });

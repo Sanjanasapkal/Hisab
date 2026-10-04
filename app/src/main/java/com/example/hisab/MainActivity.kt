@@ -222,12 +222,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Menu options dialog: About User, Log Out.
+     * Menu options dialog: Log Out only.
      */
     private fun showOptionsMenuDialog() {
         val displayName = sessionManager.getUserDisplayName()
         val options = arrayOf(
-            "About User ($displayName)",
             "Log Out ($displayName)"
         )
 
@@ -235,28 +234,10 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Hisab Options")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> showAboutUserDialog()
-                    1 -> confirmLogout()
+                    0 -> confirmLogout()
                 }
             }
-            .setNegativeButton("Close", null)
-            .show()
-    }
-
-    private fun showAboutUserDialog() {
-        val displayName = sessionManager.getUserDisplayName()
-        val email = sessionManager.getUserEmail() ?: "Not available"
-
-        AlertDialog.Builder(this)
-            .setTitle("Account Profile")
-            .setMessage(
-                "Name: $displayName\n" +
-                "Email: $email\n\n" +
-                "Cloud Sync: Automatic (MongoDB Atlas)\n" +
-                "Backend: Cloud Live (Render)\n" +
-                "Account Status: Active & Secured"
-            )
-            .setPositiveButton("OK", null)
+            .setNegativeButton("Cancel", null)
             .show()
     }
 

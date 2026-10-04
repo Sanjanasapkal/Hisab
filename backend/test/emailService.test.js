@@ -362,9 +362,12 @@ test('Email Service - Templates & Input Sanitization', async (t) => {
         const result = await emailService.sendPasswordResetLink('reset@example.com', 'JohnDoe', testUrl);
 
         assert.equal(result.delivered, true);
-        assert.ok(sentHtml.includes(testUrl));
-        assert.ok(sentHtml.includes('Reset Password'));
+        assert.ok(sentHtml.includes('abcdef1234567890'));
+        assert.ok(sentHtml.includes('Password Reset Code'));
         assert.ok(sentHtml.includes('15 minutes'));
+        assert.ok(sentHtml.includes('reset@example.com'));
+        // Verify web URL is NOT included in the email
+        assert.equal(sentHtml.includes(testUrl), false);
     });
 
     await t.test('5. Safe masking functions mask PII and secrets properly', () => {

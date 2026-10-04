@@ -60,7 +60,7 @@
                             android:textSize="13sp" />
                     </LinearLayout>
 
-                    <!-- Menu Button (User Profile, Server Settings, Logout) -->
+                    <!-- Menu Button (Log Out) -->
                     <ImageView
                         android:id="@+id/btnMenu"
                         android:layout_width="40dp"
@@ -68,7 +68,7 @@
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Account &amp; Settings"
+                        android:contentDescription="Log Out"
                         android:padding="8dp"
                         android:src="@drawable/ic_more_vert"
                         app:tint="@color/white" />
