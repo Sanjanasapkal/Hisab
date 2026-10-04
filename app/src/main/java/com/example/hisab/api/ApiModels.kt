@@ -146,3 +146,16 @@ data class TransactionResponseData(
     @SerializedName("reason") val reason: String? = null
 )
 
+// --- App Updates & Announcements DTO ---
+
+data class AppUpdateDto(
+    @SerializedName("versionCode") val versionCode: Int,
+    @SerializedName("versionName") val versionName: String,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("releaseDate") val releaseDate: String? = null,
+    @SerializedName("whatsNew") val whatsNew: List<String>? = null,
+    @SerializedName("downloadUrl") val downloadUrl: String? = null,
+    @SerializedName("isMandatory") val isMandatory: Boolean? = false
+)
+
+

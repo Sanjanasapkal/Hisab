@@ -93,4 +93,9 @@ interface HisabApiService {
     suspend fun settleHisab(
         @Body req: SettleRequest
     ): Response<ApiResponse<Any>>
+
+    // --- In-App Updates & Releases ---
+
+    @GET("api/app/version")
+    suspend fun getLatestVersion(): Response<ApiResponse<AppUpdateDto>>
 }

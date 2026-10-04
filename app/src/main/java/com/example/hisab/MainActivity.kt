@@ -11,8 +11,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import android.net.Uri
 import com.example.hisab.adapter.PersonAdapter
 import com.example.hisab.api.ApiClient
+import com.example.hisab.api.AppUpdateDto
 import com.example.hisab.api.SessionManager
 import com.example.hisab.auth.LoginActivity
 import com.example.hisab.data.PersonRepository
@@ -67,6 +69,9 @@ class MainActivity : AppCompatActivity() {
 
         // Automatically trigger cloud sync in background upon launch
         triggerSilentSync()
+
+        // Check for app updates & release announcements from MongoDB
+        checkAppUpdates(silentIfLatest = true)
     }
 
     override fun onResume() {
@@ -222,11 +227,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Menu options dialog: Log Out only.
+     * Menu options dialog: What's New & Updates, Log Out.
      */
     private fun showOptionsMenuDialog() {
         val displayName = sessionManager.getUserDisplayName()
         val options = arrayOf(
+            "What's New & Updates",
             "Log Out ($displayName)"
         )
 
@@ -234,10 +240,69 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Hisab Options")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> confirmLogout()
+                    0 -> checkAppUpdates(silentIfLatest = false)
+                    1 -> confirmLogout()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun checkAppUpdates(silentIfLatest: Boolean) {
+        lifecycleScope.launch {
+            try {
+                val apiService = ApiClient.getService(this@MainActivity)
+                val response = apiService.getLatestVersion()
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val update = response.body()?.data ?: return@launch
+                    val currentVersionCode = BuildConfig.VERSION_CODE
+                    if (update.versionCode > currentVersionCode) {
+                        showUpdateAvailableDialog(update)
+                    } else if (!silentIfLatest) {
+                        showLatestVersionDialog(update)
+                    }
+                } else if (!silentIfLatest) {
+                    Toast.makeText(this@MainActivity, "Unable to check for updates right now.", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                if (!silentIfLatest) {
+                    Toast.makeText(this@MainActivity, "Could not reach update server.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showUpdateAvailableDialog(update: AppUpdateDto) {
+        val notes = update.whatsNew?.joinToString("\n• ", prefix = "• ") ?: "General stability and performance improvements."
+        val message = "${update.title ?: "A newer version of Hisab is available!"}\n\nWhat's New in v${update.versionName}:\n$notes"
+
+        AlertDialog.Builder(this)
+            .setTitle("🚀 New Update Available (v${update.versionName})")
+            .setMessage(message)
+            .setPositiveButton("Download Update") { _, _ ->
+                val downloadUrl = update.downloadUrl ?: "https://github.com/Sanjanasapkal/Hisab/raw/main/Hisab.apk"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
+                startActivity(intent)
+            }
+            .setNegativeButton(if (update.isMandatory == true) "Exit App" else "Later") { dialog, _ ->
+                if (update.isMandatory == true) {
+                    finish()
+                } else {
+                    dialog.dismiss()
+                }
+            }
+            .setCancelable(update.isMandatory != true)
+            .show()
+    }
+
+    private fun showLatestVersionDialog(update: AppUpdateDto) {
+        val notes = update.whatsNew?.joinToString("\n• ", prefix = "• ") ?: "All services running normally."
+        val message = "You are using Hisab v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE}).\n\nLatest Highlights:\n$notes"
+
+        AlertDialog.Builder(this)
+            .setTitle("🎉 You're Up to Date!")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
             .show()
     }
 

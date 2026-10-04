@@ -207,10 +207,12 @@ app.get('/reset-password', (req, res) => {
 const authRoutes = require('./routes/authRoutes');
 const personRoutes = require('./routes/personRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
+const appRoutes = require('./routes/appRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/people', personRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/app', appRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {
