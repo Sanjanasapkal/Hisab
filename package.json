@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Hisab - Personal Finance & Digital Ledger System",
+  "author": "Sanjana Dadaso Sapkal",
   "scripts": {
     "dev": "npm --prefix backend run dev",
     "start": "npm --prefix backend start",

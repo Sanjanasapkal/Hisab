@@ -16,7 +16,7 @@
     "mongodb",
     "express"
   ],
-  "author": "",
+  "author": "Sanjana Dadaso Sapkal",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
