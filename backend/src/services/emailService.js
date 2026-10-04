@@ -165,13 +165,21 @@ function verifyEmailServiceConfig() {
 /**
  * Creates or retrieves a Nodemailer SMTP transporter.
  */
-function createTransporter() {
+function createTransporter(portOverride = null) {
     if (_transporterOverride) {
         return _transporterOverride;
     }
 
     const host = process.env.SMTP_HOST;
-    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+    let port = portOverride || parseInt(process.env.SMTP_PORT || '587', 10);
+
+    // Render & cloud hosts block outbound port 587 on their free tier.
+    // Brevo officially supports port 2525 as the cloud-safe alternative.
+    const isCloudEnv = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
+    if (!portOverride && host && (host.includes('brevo.com') || host.includes('sendinblue')) && port === 587 && isCloudEnv) {
+        port = 2525;
+    }
+
     const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
     return nodemailer.createTransport({
@@ -182,9 +190,9 @@ function createTransporter() {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
         },
-        connectionTimeout: 10000, // 10s connection timeout
-        greetingTimeout: 10000,   // 10s greeting timeout
-        socketTimeout: 15000      // 15s socket timeout
+        connectionTimeout: 15000, // 15s connection timeout
+        greetingTimeout: 15000,   // 15s greeting timeout
+        socketTimeout: 20000      // 20s socket timeout
     });
 }
 
@@ -240,34 +248,66 @@ async function sendViaResend({ to, subject, html, text }) {
  * Delivers email via Nodemailer SMTP and verifies delivery acceptance.
  */
 async function sendViaSmtp({ to, subject, html, text }) {
-    const transporter = createTransporter();
     const fromAddress = process.env.EMAIL_FROM || `"Hisab Support" <${process.env.SMTP_USER}>`;
+    const host = process.env.SMTP_HOST || '';
+    const configuredPort = parseInt(process.env.SMTP_PORT || '587', 10);
+    const isBrevo = host.includes('brevo.com') || host.includes('sendinblue');
 
-    const info = await transporter.sendMail({
-        from: fromAddress,
-        to,
-        subject,
-        text,
-        html
-    });
+    try {
+        const transporter = createTransporter();
+        const info = await transporter.sendMail({
+            from: fromAddress,
+            to,
+            subject,
+            text,
+            html
+        });
 
-    // Verification of provider acceptance: Do not claim sent unless accepted
-    if (Array.isArray(info.rejected) && info.rejected.length > 0 && info.rejected.includes(to)) {
-        throw new Error(`SMTP server rejected delivery to recipient: ${maskEmail(to)}`);
+        // Verification of provider acceptance: Do not claim sent unless accepted
+        if (Array.isArray(info.rejected) && info.rejected.length > 0 && info.rejected.includes(to)) {
+            throw new Error(`SMTP server rejected delivery to recipient: ${maskEmail(to)}`);
+        }
+
+        if (Array.isArray(info.accepted) && info.accepted.length === 0) {
+            throw new Error(`SMTP server did not accept recipient: ${maskEmail(to)}`);
+        }
+
+        console.log(`[EMAIL] Dispatched via SMTP to ${maskEmail(to)} (MessageId: ${info.messageId || 'unknown'})`);
+        return {
+            delivered: true,
+            mock: false,
+            provider: 'smtp',
+            messageId: info.messageId,
+            accepted: info.accepted
+        };
+    } catch (primaryErr) {
+        // If port 587 was blocked by cloud host firewall (e.g. Render free tier), retry on cloud-safe port 2525
+        if (!_transporterOverride && isBrevo && configuredPort !== 2525) {
+            try {
+                console.log(`[EMAIL] Primary SMTP connection failed (${primaryErr.message}). Retrying via cloud-safe port 2525...`);
+                const fallbackTransporter = createTransporter(2525);
+                const fallbackInfo = await fallbackTransporter.sendMail({
+                    from: fromAddress,
+                    to,
+                    subject,
+                    text,
+                    html
+                });
+
+                console.log(`[EMAIL] Dispatched via SMTP port 2525 to ${maskEmail(to)} (MessageId: ${fallbackInfo.messageId || 'unknown'})`);
+                return {
+                    delivered: true,
+                    mock: false,
+                    provider: 'smtp',
+                    messageId: fallbackInfo.messageId,
+                    accepted: fallbackInfo.accepted
+                };
+            } catch (fallbackErr) {
+                console.error(`[EMAIL] Fallback port 2525 also failed: ${fallbackErr.message}`);
+            }
+        }
+        throw primaryErr;
     }
-
-    if (Array.isArray(info.accepted) && info.accepted.length === 0) {
-        throw new Error(`SMTP server did not accept recipient: ${maskEmail(to)}`);
-    }
-
-    console.log(`[EMAIL] Dispatched via SMTP to ${maskEmail(to)} (MessageId: ${info.messageId || 'unknown'})`);
-    return {
-        delivered: true,
-        mock: false,
-        provider: 'smtp',
-        messageId: info.messageId,
-        accepted: info.accepted
-    };
 }
 
 /**
