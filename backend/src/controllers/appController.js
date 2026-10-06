@@ -4,15 +4,16 @@ const AppUpdate = require('../models/AppUpdate');
  * Default fallback metadata if MongoDB does not have an active record yet.
  */
 const DEFAULT_UPDATE_METADATA = {
-    versionCode: 1,
-    versionName: '1.0.0',
-    title: 'Hisab Cloud Release',
-    releaseDate: new Date('2026-10-05'),
+    versionCode: 2,
+    versionName: '1.1.0',
+    title: 'Hisab v1.1.0 — Smart Calculations & Simplified UI',
+    releaseDate: new Date('2026-10-06'),
     whatsNew: [
-        '🚀 Official Cloud Release on Render & MongoDB Atlas',
-        '🔒 Real-time email verification OTPs & secure in-app reset',
-        '💰 Multi-party debt & receivable balance tracking',
-        '📜 Audit-preserved "Settle Hisab" history ledger'
+        '⚡ Simplified 2-way Google Pay style arrows (↗ You Gave / ↙ You Got)',
+        '📅 Custom settlement date selector with calendar picker',
+        '🔄 Auto-settle: balanced transactions (₹0) automatically move to History',
+        '📖 Comprehensive "About Hisab & Calculation Guide" in options menu',
+        '🔑 Seamless login for emails with dots (e.g. tanujamohite.286@gmail.com)'
     ],
     downloadUrl: 'https://github.com/Sanjanasapkal/Hisab/raw/main/Hisab.apk',
     isMandatory: false,

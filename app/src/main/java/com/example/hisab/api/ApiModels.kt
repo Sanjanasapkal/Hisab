@@ -120,7 +120,8 @@ data class CreateTransactionRequest(
 data class SettleRequest(
     @SerializedName("personId") val personId: String,
     @SerializedName("note") val note: String? = null,
-    @SerializedName("clientLocalId") val clientLocalId: Long? = null
+    @SerializedName("clientLocalId") val clientLocalId: Long? = null,
+    @SerializedName("settledAt") val settledAt: Long? = null
 )
 
 data class RemoteTransactionDto(

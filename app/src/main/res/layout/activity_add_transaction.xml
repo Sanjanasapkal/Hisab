@@ -94,52 +94,40 @@
                     android:textSize="14sp" />
 
                 <!-- RadioGroup or ChipGroup for Direction -->
+                <!-- RadioGroup for Direction (Google Pay style Outgoing & Incoming indicators) -->
                 <RadioGroup
                     android:id="@+id/rgTransactionType"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp">
+                    android:layout_marginTop="10dp">
 
                     <RadioButton
                         android:id="@+id/rbTheyOweMe"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:checked="true"
-                        android:fontFamily="sans-serif"
-                        android:paddingVertical="4dp"
-                        android:text="They owe me (+) — e.g. I gave money, paid bill for them"
+                        android:drawableStart="@drawable/ic_arrow_outgoing"
+                        android:drawablePadding="12dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:lineSpacingExtra="2dp"
+                        android:paddingVertical="8dp"
+                        android:text="You Gave / They Owe (+)\n(e.g. Lent money, paid bill for them)"
                         android:textColor="@color/main_text"
-                        android:textSize="13sp" />
+                        android:textSize="14sp" />
 
                     <RadioButton
                         android:id="@+id/rbIOweThem"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif"
-                        android:paddingVertical="4dp"
-                        android:text="I owe them (-) — e.g. they gave money, paid bill for me"
+                        android:layout_marginTop="6dp"
+                        android:drawableStart="@drawable/ic_arrow_incoming"
+                        android:drawablePadding="12dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:lineSpacingExtra="2dp"
+                        android:paddingVertical="8dp"
+                        android:text="You Got / I Owe (-)\n(e.g. Received money, they paid for you)"
                         android:textColor="@color/main_text"
-                        android:textSize="13sp" />
-
-                    <RadioButton
-                        android:id="@+id/rbPaymentReceived"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif"
-                        android:paddingVertical="4dp"
-                        android:text="Payment received (-) — they returned money to me"
-                        android:textColor="@color/main_text"
-                        android:textSize="13sp" />
-
-                    <RadioButton
-                        android:id="@+id/rbPaymentMade"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif"
-                        android:paddingVertical="4dp"
-                        android:text="Payment made (+) — I returned money to them"
-                        android:textColor="@color/main_text"
-                        android:textSize="13sp" />
+                        android:textSize="14sp" />
                 </RadioGroup>
 
                 <!-- 2. Amount Input -->

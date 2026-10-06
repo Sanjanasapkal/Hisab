@@ -1,5 +1,6 @@
 package com.example.hisab
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -21,9 +22,11 @@ import com.example.hisab.databinding.DialogAddPersonBinding
 import com.example.hisab.databinding.DialogSettleHisabBinding
 import com.example.hisab.model.Person
 import com.example.hisab.util.CurrencyFormatter
+import com.example.hisab.util.DateFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 /**
  * Screen 2: Dedicated account details screen for a specific person.
@@ -125,8 +128,12 @@ class PersonDetailActivity : AppCompatActivity() {
 
     /**
      * Loads the latest person balance and current period transactions.
+     * Automatically moves any balancing transactions summing to ₹0 into History.
      */
     private fun loadAccountData() {
+        // Auto-settle check: If transactions in the open period net to ₹0.00, move them to history!
+        transactionRepository.checkAndAutoSettleZeroBalance(personId)
+
         val person = personRepository.getPersonById(personId)
         if (person == null) {
             finish()
@@ -219,13 +226,40 @@ class PersonDetailActivity : AppCompatActivity() {
             )
         }
 
+        // Default settlement date to today
+        var selectedSettlementTimestamp = System.currentTimeMillis()
+        dialogBinding.tvSelectedSettlementDate.text = DateFormatter.formatDateOnly(selectedSettlementTimestamp)
+
+        dialogBinding.btnSelectSettlementDate.setOnClickListener {
+            val calendar = Calendar.getInstance().apply { timeInMillis = selectedSettlementTimestamp }
+            DatePickerDialog(
+                this,
+                { _, year, month, dayOfMonth ->
+                    val chosen = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, year)
+                        set(Calendar.MONTH, month)
+                        set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                    }
+                    selectedSettlementTimestamp = chosen.timeInMillis
+                    dialogBinding.tvSelectedSettlementDate.text = DateFormatter.formatDateOnly(selectedSettlementTimestamp)
+                },
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH),
+                calendar.get(Calendar.DAY_OF_MONTH)
+            ).show()
+        }
+
         dialogBinding.btnCancelSettle.setOnClickListener {
             dialog.dismiss()
         }
 
         dialogBinding.btnConfirmSettle.setOnClickListener {
             val note = dialogBinding.etSettlementNote.text?.toString()
-            val (success, error) = transactionRepository.settleHisab(personId, note)
+            val (success, error) = transactionRepository.settleHisab(
+                personId,
+                note,
+                settledAt = selectedSettlementTimestamp
+            )
             if (success) {
                 dialog.dismiss()
                 Toast.makeText(this, getString(R.string.settled_success), Toast.LENGTH_SHORT).show()
@@ -244,7 +278,8 @@ class PersonDetailActivity : AppCompatActivity() {
                             val settleReq = SettleRequest(
                                 personId = remotePersonId,
                                 note = note,
-                                clientLocalId = personId
+                                clientLocalId = personId,
+                                settledAt = selectedSettlementTimestamp
                             )
                             ApiClient.getService(applicationContext).settleHisab(settleReq)
 

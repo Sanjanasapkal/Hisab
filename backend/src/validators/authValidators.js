@@ -1,6 +1,22 @@
 const validator = require('validator');
 
 /**
+ * Normalizes an email address without stripping dots from Gmail user handles.
+ * Standard validator.normalizeEmail strips dots by default, which broke accounts
+ * like tanujamohite.286@gmail.com when logging in.
+ */
+function cleanEmail(email) {
+    if (!email || typeof email !== 'string') return '';
+    const trimmed = email.trim().toLowerCase();
+    const normalized = validator.normalizeEmail(trimmed, {
+        gmail_remove_dots: false,
+        all_lowercase: true,
+        gmail_remove_subaddress: false
+    });
+    return normalized || trimmed;
+}
+
+/**
  * Validates registration input payload.
  */
 function validateRegistration(data = {}) {
@@ -37,7 +53,8 @@ function validateRegistration(data = {}) {
     }
 
     const fallbackName = email ? email.split('@')[0] : 'User';
-    const name = rawName || fallbackName;
+    const preservedEmail = cleanEmail(email);
+    const canonicalEmail = (validator.normalizeEmail(email, { gmail_remove_dots: true }) || preservedEmail).trim();
 
     return {
         isValid: errors.length === 0,
@@ -45,8 +62,8 @@ function validateRegistration(data = {}) {
         normalized: {
             name,
             username: name,
-            email: validator.normalizeEmail(email) || email.toLowerCase(),
-            normalizedEmail: (validator.normalizeEmail(email) || email.toLowerCase()).trim(),
+            email: preservedEmail,
+            normalizedEmail: canonicalEmail,
             password
         }
     };
@@ -70,12 +87,14 @@ function validateVerifyOtp(data = {}) {
         errors.push('Verification code must be exactly 6 digits');
     }
 
+    const normalizedEmailVal = cleanEmail(email);
+
     return {
         isValid: errors.length === 0,
         errors,
         normalized: {
-            email: validator.normalizeEmail(email) || email.toLowerCase(),
-            normalizedEmail: (validator.normalizeEmail(email) || email.toLowerCase()).trim(),
+            email: normalizedEmailVal,
+            normalizedEmail: normalizedEmailVal,
             otp
         }
     };
@@ -95,7 +114,7 @@ function validateResendOtp(data = {}) {
     return {
         isValid: errors.length === 0,
         errors,
-        normalizedEmail: (validator.normalizeEmail(email) || email.toLowerCase()).trim()
+        normalizedEmail: cleanEmail(email)
     };
 }
 
@@ -120,7 +139,7 @@ function validateLogin(data = {}) {
         errors,
         normalized: {
             identifier,
-            normalizedIdentifier: identifier.toLowerCase(),
+            normalizedIdentifier: identifier.includes('@') ? cleanEmail(identifier) : identifier.toLowerCase(),
             password
         }
     };
@@ -142,7 +161,7 @@ function validateForgotUsername(data = {}) {
     return {
         isValid: errors.length === 0,
         errors,
-        normalizedEmail: (validator.normalizeEmail(email) || email.toLowerCase()).trim()
+        normalizedEmail: cleanEmail(email)
     };
 }
 
@@ -160,7 +179,7 @@ function validateForgotPassword(data = {}) {
 
     const isEmail = validator.isEmail(input);
     const normalizedIdentifier = isEmail
-        ? (validator.normalizeEmail(input) || input.toLowerCase()).trim()
+        ? cleanEmail(input)
         : input.toLowerCase().trim();
 
     return {
@@ -207,13 +226,14 @@ function validateResetPassword(data = {}) {
         errors,
         normalized: {
             token,
-            email,
+            email: cleanEmail(email),
             newPassword
         }
     };
 }
 
 module.exports = {
+    cleanEmail,
     validateRegistration,
     validateVerifyOtp,
     validateResendOtp,

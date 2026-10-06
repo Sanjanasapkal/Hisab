@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Circular Background Badge -->
+    <path
+        android:fillColor="@color/negative_bg"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" />
+    <!-- Incoming Arrow (Google Pay / Call Received) -->
+    <path
+        android:fillColor="@color/negative_balance"
+        android:pathData="M14,17H9v-5h1.6v2.27L15.41,9.46l1.13,1.13L11.73,15.4H14V17z" />
+</vector>

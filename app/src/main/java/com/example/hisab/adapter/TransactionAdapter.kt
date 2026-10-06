@@ -65,18 +65,18 @@ class TransactionAdapter(
             binding.tvAmount.text = CurrencyFormatter.formatSignedRupees(amount)
 
             if (amount > 0) {
-                // They owe me / positive
+                // They owe me / positive (Outgoing money / You Gave)
                 val positiveColor = ContextCompat.getColor(context, R.color.positive_balance)
                 binding.tvAmount.setTextColor(positiveColor)
                 binding.viewIndicator.setBackgroundColor(positiveColor)
-                binding.tvTypeTag.text = "They owe me"
+                binding.tvTypeTag.text = "↗ You Gave"
                 binding.tvTypeTag.setTextColor(positiveColor)
             } else {
-                // I owe them / negative
+                // I owe them / negative (Incoming money / You Got)
                 val negativeColor = ContextCompat.getColor(context, R.color.negative_balance)
                 binding.tvAmount.setTextColor(negativeColor)
                 binding.viewIndicator.setBackgroundColor(negativeColor)
-                binding.tvTypeTag.text = "I owe them"
+                binding.tvTypeTag.text = "↙ You Got"
                 binding.tvTypeTag.setTextColor(negativeColor)
             }
 

@@ -227,11 +227,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Menu options dialog: What's New & Updates, Log Out.
+     * Menu options dialog: About Hisab, What's New & Updates, Log Out.
      */
     private fun showOptionsMenuDialog() {
         val displayName = sessionManager.getUserDisplayName()
         val options = arrayOf(
+            "About Hisab & Calculation Guide",
             "What's New & Updates",
             "Log Out ($displayName)"
         )
@@ -240,12 +241,26 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Hisab Options")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> checkAppUpdates(silentIfLatest = false)
-                    1 -> confirmLogout()
+                    0 -> showAboutHisabDialog()
+                    1 -> checkAppUpdates(silentIfLatest = false)
+                    2 -> confirmLogout()
                 }
             }
             .setNegativeButton("Close", null)
             .show()
+    }
+
+    private fun showAboutHisabDialog() {
+        val dialogBinding = com.example.hisab.databinding.DialogAboutHisabBinding.inflate(layoutInflater)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogBinding.root)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialogBinding.btnCloseAbout.setOnClickListener {
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     private fun checkAppUpdates(silentIfLatest: Boolean) {

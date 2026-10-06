@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Circular Background Badge -->
+    <path
+        android:fillColor="@color/positive_bg"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" />
+    <!-- Outgoing Arrow (Google Pay / Call Made) -->
+    <path
+        android:fillColor="@color/positive_balance"
+        android:pathData="M10,7h5v5h-1.6V9.73L8.59,14.54L7.46,13.41L12.27,8.6H10V7z" />
+</vector>

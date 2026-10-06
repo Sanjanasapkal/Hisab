@@ -1,10 +1,12 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const validator = require('validator');
 const User = require('../models/User');
 const OtpChallenge = require('../models/OtpChallenge');
 const PasswordResetToken = require('../models/PasswordResetToken');
 const emailService = require('../services/emailService');
 const {
+    cleanEmail,
     validateRegistration,
     validateVerifyOtp,
     validateResendOtp,
@@ -14,6 +16,18 @@ const {
     validateResetPassword
 } = require('../validators/authValidators');
 const { generateToken } = require('../services/tokenService');
+
+/**
+ * Returns candidate email variations (e.g., both with and without dots for Gmail)
+ * to ensure users like tanujamohite.286@gmail.com match existing or new records seamlessly.
+ */
+function getCandidateEmails(email) {
+    if (!email || typeof email !== 'string') return [];
+    const clean = email.trim().toLowerCase();
+    const stripped = validator.normalizeEmail(clean, { gmail_remove_dots: true }) || clean;
+    const preserved = validator.normalizeEmail(clean, { gmail_remove_dots: false }) || clean;
+    return Array.from(new Set([clean, stripped, preserved]));
+}
 
 /**
  * Generates a cryptographically secure 6-digit numeric OTP.
@@ -157,8 +171,14 @@ async function verifyEmailOtp(req, res, next) {
 
         const { normalizedEmail, otp } = validation.normalized;
 
-        // 1. Find user by normalized email
-        const user = await User.findOne({ normalizedEmail });
+        // 1. Find user by normalized email or candidates (handles Gmail dot differences)
+        const candidates = getCandidateEmails(normalizedEmail);
+        const user = await User.findOne({
+            $or: [
+                { normalizedEmail: { $in: candidates } },
+                { email: { $in: candidates } }
+            ]
+        });
         if (!user) {
             return res.status(400).json({
                 success: false,
@@ -259,7 +279,13 @@ async function resendEmailOtp(req, res, next) {
 
         const { normalizedEmail } = validation;
 
-        const user = await User.findOne({ normalizedEmail });
+        const candidates = getCandidateEmails(normalizedEmail);
+        const user = await User.findOne({
+            $or: [
+                { normalizedEmail: { $in: candidates } },
+                { email: { $in: candidates } }
+            ]
+        });
 
         // Generic safe response to prevent account enumeration if user does not exist
         if (!user) {
@@ -357,10 +383,25 @@ async function login(req, res, next) {
 
         const { normalizedIdentifier, password } = validation.normalized;
 
-        // Allow login by normalized email or username
-        const query = normalizedIdentifier.includes('@')
-            ? { normalizedEmail: normalizedIdentifier }
-            : { $or: [{ normalizedEmail: normalizedIdentifier }, { username: normalizedIdentifier }] };
+        // Allow login by normalized email (both with and without dots for backwards compatibility) or username
+        let query;
+        if (normalizedIdentifier.includes('@')) {
+            const candidates = getCandidateEmails(normalizedIdentifier);
+            query = {
+                $or: [
+                    { email: { $in: candidates } },
+                    { normalizedEmail: { $in: candidates } }
+                ]
+            };
+        } else {
+            query = {
+                $or: [
+                    { username: normalizedIdentifier },
+                    { email: normalizedIdentifier },
+                    { normalizedEmail: normalizedIdentifier }
+                ]
+            };
+        }
 
         const user = await User.findOne(query);
 
@@ -475,7 +516,13 @@ async function forgotUsername(req, res, next) {
 
         const { normalizedEmail } = validation;
 
-        const user = await User.findOne({ normalizedEmail });
+        const candidates = getCandidateEmails(normalizedEmail);
+        const user = await User.findOne({
+            $or: [
+                { normalizedEmail: { $in: candidates } },
+                { email: { $in: candidates } }
+            ]
+        });
         if (user && user.emailVerified) {
             try {
                 await emailService.sendUsernameRecovery(user.email, user.username);
@@ -512,9 +559,10 @@ async function forgotPassword(req, res, next) {
 
         const { normalizedIdentifier, isEmail } = validation;
 
+        const candidates = isEmail ? getCandidateEmails(normalizedIdentifier) : [normalizedIdentifier];
         const query = isEmail
-            ? { normalizedEmail: normalizedIdentifier }
-            : { normalizedUsername: normalizedIdentifier };
+            ? { $or: [{ normalizedEmail: { $in: candidates } }, { email: { $in: candidates } }] }
+            : { $or: [{ username: normalizedIdentifier }, { email: normalizedIdentifier }] };
 
         const user = await User.findOne(query);
         if (user && user.emailVerified) {

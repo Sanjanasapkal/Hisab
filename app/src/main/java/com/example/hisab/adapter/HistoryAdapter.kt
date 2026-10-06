@@ -121,13 +121,13 @@ class HistoryAdapter(
                         val posColor = ContextCompat.getColor(context, R.color.positive_balance)
                         tvAmount.setTextColor(posColor)
                         viewIndicator.setBackgroundColor(posColor)
-                        tvTypeTag.text = "They owe me"
+                        tvTypeTag.text = "↗ You Gave"
                         tvTypeTag.setTextColor(posColor)
                     } else {
                         val negColor = ContextCompat.getColor(context, R.color.negative_balance)
                         tvAmount.setTextColor(negColor)
                         viewIndicator.setBackgroundColor(negColor)
-                        tvTypeTag.text = "I owe them"
+                        tvTypeTag.text = "↙ You Got"
                         tvTypeTag.setTextColor(negColor)
                     }
 

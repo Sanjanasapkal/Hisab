@@ -161,6 +161,43 @@ test('Authentication - Login & Session Suite', async (t) => {
         assert.ok(res.body.data.token);
     });
 
+    await t.test('6b. Successful login with dotted email (e.g. tanujamohite.286@gmail.com) and stripped version', async () => {
+        const dottedEmail = 'tanujamohite.286@gmail.com';
+        const strippedEmail = 'tanujamohite286@gmail.com';
+        await User.deleteMany({ email: { $in: [dottedEmail, strippedEmail] } });
+
+        await User.create({
+            username: 'Tanuja',
+            email: dottedEmail,
+            normalizedEmail: strippedEmail,
+            passwordHash,
+            emailVerified: true,
+            emailVerifiedAt: new Date()
+        });
+
+        // 1. Can log in with the exact dotted email
+        const res1 = await apiRequest(app, {
+            method: 'POST',
+            path: '/api/auth/login',
+            body: { email: dottedEmail, password: testPassword }
+        });
+        assert.equal(res1.status, 200);
+        assert.equal(res1.body.success, true);
+        assert.ok(res1.body.data.token);
+
+        // 2. Can also log in with the stripped version
+        const res2 = await apiRequest(app, {
+            method: 'POST',
+            path: '/api/auth/login',
+            body: { email: strippedEmail, password: testPassword }
+        });
+        assert.equal(res2.status, 200);
+        assert.equal(res2.body.success, true);
+        assert.ok(res2.body.data.token);
+
+        await User.deleteMany({ email: { $in: [dottedEmail, strippedEmail] } });
+    });
+
     await t.test('7. Access GET /api/auth/me with valid Bearer token', async () => {
         const res = await apiRequest(app, {
             method: 'GET',

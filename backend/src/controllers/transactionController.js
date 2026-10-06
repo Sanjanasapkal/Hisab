@@ -61,16 +61,49 @@ async function addTransaction(req, res, next) {
         }
 
         // 5. Create transaction
+        const txDate = transactionDate ? new Date(transactionDate) : new Date();
         const transaction = await Transaction.create({
             ownerUserId: req.userId,
             personId: person._id,
             periodId: openPeriod._id,
             amountPaise,
             reason: trimmedReason,
-            transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+            transactionDate: txDate,
             notes: notes ? String(notes).trim() : null,
             clientLocalId: clientLocalId || null
         });
+
+        // 6. Check if this transaction brings the open period balance to ₹0.00
+        // If balance reaches 0, auto-close the period into history so active period stays clean!
+        const allPeriodTx = await Transaction.find({
+            ownerUserId: req.userId,
+            periodId: openPeriod._id
+        });
+        const periodTotal = (openPeriod.openingBalancePaise || 0) + allPeriodTx.reduce((sum, t) => sum + t.amountPaise, 0);
+
+        if (allPeriodTx.length > 0 && periodTotal === 0) {
+            openPeriod.status = 'closed';
+            openPeriod.closedAt = txDate;
+            openPeriod.closingBalancePaise = 0;
+            await openPeriod.save();
+
+            await Settlement.create({
+                ownerUserId: req.userId,
+                personId: person._id,
+                periodId: openPeriod._id,
+                finalBalancePaise: 0,
+                settledAt: txDate,
+                note: 'Settled (Balance cleared to ₹0.00)'
+            });
+
+            await AccountPeriod.create({
+                ownerUserId: req.userId,
+                personId: person._id,
+                startedAt: txDate,
+                openingBalancePaise: 0,
+                status: 'open'
+            });
+        }
 
         return res.status(201).json({
             success: true,
@@ -122,7 +155,7 @@ async function deleteTransaction(req, res, next) {
  */
 async function settleHisab(req, res, next) {
     try {
-        const { personId, note, clientLocalId } = req.body;
+        const { personId, note, clientLocalId, settledAt } = req.body;
 
         const person = await Person.findOne({
             _id: personId,
@@ -161,11 +194,11 @@ async function settleHisab(req, res, next) {
 
         const txSum = transactions.reduce((acc, t) => acc + t.amountPaise, 0);
         const finalBalance = (openPeriod.openingBalancePaise || 0) + txSum;
-        const now = new Date();
+        const settleDate = settledAt ? new Date(settledAt) : new Date();
 
         // 1. Close current period
         openPeriod.status = 'closed';
-        openPeriod.closedAt = now;
+        openPeriod.closedAt = settleDate;
         openPeriod.closingBalancePaise = finalBalance;
         await openPeriod.save();
 
@@ -175,7 +208,7 @@ async function settleHisab(req, res, next) {
             personId: person._id,
             periodId: openPeriod._id,
             finalBalancePaise: finalBalance,
-            settledAt: now,
+            settledAt: settleDate,
             note: note ? String(note).trim() : null,
             clientLocalId: clientLocalId || null
         });
@@ -184,7 +217,7 @@ async function settleHisab(req, res, next) {
         const newOpenPeriod = await AccountPeriod.create({
             ownerUserId: req.userId,
             personId: person._id,
-            startedAt: now,
+            startedAt: settleDate,
             openingBalancePaise: 0,
             status: 'open'
         });

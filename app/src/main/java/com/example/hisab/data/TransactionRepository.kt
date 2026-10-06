@@ -105,6 +105,44 @@ class TransactionRepository(context: Context) {
             }
 
             val transId = db.insertOrThrow(DatabaseHelper.TABLE_TRANSACTIONS, null, values)
+
+            // Auto-settle: If adding this transaction brings the open period balance to ₹0.00,
+            // automatically close this period into History so the active ledger displays 0 transactions.
+            val updatedBalance = calculatePeriodBalance(openPeriod)
+            if (updatedBalance == 0L) {
+                // 1. Close current period
+                val closeValues = ContentValues().apply {
+                    put(DatabaseHelper.COL_PERIODS_CLOSED_AT, transactionDate)
+                    put(DatabaseHelper.COL_PERIODS_CLOSING_BALANCE_PAISE, 0L)
+                    put(DatabaseHelper.COL_PERIODS_STATUS, AccountPeriod.STATUS_CLOSED)
+                }
+                db.update(
+                    DatabaseHelper.TABLE_ACCOUNT_PERIODS,
+                    closeValues,
+                    "${DatabaseHelper.COL_PERIODS_ID} = ?",
+                    arrayOf(openPeriod.id.toString())
+                )
+
+                // 2. Insert settlement record
+                val settleValues = ContentValues().apply {
+                    put(DatabaseHelper.COL_SETTLE_PERSON_ID, personId)
+                    put(DatabaseHelper.COL_SETTLE_PERIOD_ID, openPeriod.id)
+                    put(DatabaseHelper.COL_SETTLE_FINAL_BALANCE_PAISE, 0L)
+                    put(DatabaseHelper.COL_SETTLE_SETTLED_AT, transactionDate)
+                    put(DatabaseHelper.COL_SETTLE_NOTE, "Settled (Balance cleared to ₹0.00)")
+                }
+                db.insertOrThrow(DatabaseHelper.TABLE_SETTLEMENTS, null, settleValues)
+
+                // 3. Open brand new period starting at 0
+                val newPeriodValues = ContentValues().apply {
+                    put(DatabaseHelper.COL_PERIODS_PERSON_ID, personId)
+                    put(DatabaseHelper.COL_PERIODS_STARTED_AT, transactionDate)
+                    put(DatabaseHelper.COL_PERIODS_OPENING_BALANCE_PAISE, 0L)
+                    put(DatabaseHelper.COL_PERIODS_STATUS, AccountPeriod.STATUS_OPEN)
+                }
+                db.insertOrThrow(DatabaseHelper.TABLE_ACCOUNT_PERIODS, null, newPeriodValues)
+            }
+
             db.setTransactionSuccessful()
             Pair(transId, null)
         } catch (e: Exception) {
@@ -181,23 +219,26 @@ class TransactionRepository(context: Context) {
     /**
      * Settles the account for a person:
      * 1. Calculates the final balance of the open period.
-     * 2. Closes the period and stamps closed_at and closing_balance_paise.
+     * 2. Closes the period and stamps closed_at and closing_balance_paise with the given settlement date.
      * 3. Creates a Settlement record with final balance, timestamp, and optional note.
      * 4. Opens a fresh new period starting at 0.
      *
      * Executed inside an atomic transaction.
      */
-    fun settleHisab(personId: Long, note: String? = null): Pair<Boolean, String?> {
+    fun settleHisab(
+        personId: Long,
+        note: String? = null,
+        settledAt: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String?> {
         val db = dbHelper.writableDatabase
         db.beginTransaction()
         return try {
             val openPeriod = getOrCreateOpenPeriod(personId)
             val finalBalance = calculatePeriodBalance(openPeriod)
-            val now = System.currentTimeMillis()
 
             // 1. Close current period
             val closeValues = ContentValues().apply {
-                put(DatabaseHelper.COL_PERIODS_CLOSED_AT, now)
+                put(DatabaseHelper.COL_PERIODS_CLOSED_AT, settledAt)
                 put(DatabaseHelper.COL_PERIODS_CLOSING_BALANCE_PAISE, finalBalance)
                 put(DatabaseHelper.COL_PERIODS_STATUS, AccountPeriod.STATUS_CLOSED)
             }
@@ -213,7 +254,7 @@ class TransactionRepository(context: Context) {
                 put(DatabaseHelper.COL_SETTLE_PERSON_ID, personId)
                 put(DatabaseHelper.COL_SETTLE_PERIOD_ID, openPeriod.id)
                 put(DatabaseHelper.COL_SETTLE_FINAL_BALANCE_PAISE, finalBalance)
-                put(DatabaseHelper.COL_SETTLE_SETTLED_AT, now)
+                put(DatabaseHelper.COL_SETTLE_SETTLED_AT, settledAt)
                 put(DatabaseHelper.COL_SETTLE_NOTE, note?.trim()?.ifEmpty { null })
             }
             db.insertOrThrow(DatabaseHelper.TABLE_SETTLEMENTS, null, settleValues)
@@ -221,7 +262,7 @@ class TransactionRepository(context: Context) {
             // 3. Start a brand new open period
             val newPeriodValues = ContentValues().apply {
                 put(DatabaseHelper.COL_PERIODS_PERSON_ID, personId)
-                put(DatabaseHelper.COL_PERIODS_STARTED_AT, now)
+                put(DatabaseHelper.COL_PERIODS_STARTED_AT, settledAt)
                 put(DatabaseHelper.COL_PERIODS_OPENING_BALANCE_PAISE, 0L)
                 put(DatabaseHelper.COL_PERIODS_STATUS, AccountPeriod.STATUS_OPEN)
             }
@@ -231,6 +272,73 @@ class TransactionRepository(context: Context) {
             Pair(true, null)
         } catch (e: Exception) {
             Pair(false, "Settlement failed: ${e.localizedMessage}")
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Checks if the active open period has transactions that balance out to ₹0.00.
+     * If so, automatically closes the period and moves the transactions to History.
+     *
+     * @return true if an auto-settlement occurred.
+     */
+    fun checkAndAutoSettleZeroBalance(
+        personId: Long,
+        timestamp: Long = System.currentTimeMillis()
+    ): Boolean {
+        val db = dbHelper.writableDatabase
+        db.beginTransaction()
+        return try {
+            val openPeriod = getOrCreateOpenPeriod(personId)
+            val transactions = getTransactionsForPeriod(openPeriod.id)
+            if (transactions.isNotEmpty()) {
+                val balance = calculatePeriodBalance(openPeriod)
+                if (balance == 0L) {
+                    val settleTimestamp = transactions.firstOrNull()?.transactionDate ?: timestamp
+
+                    // 1. Close current period
+                    val closeValues = ContentValues().apply {
+                        put(DatabaseHelper.COL_PERIODS_CLOSED_AT, settleTimestamp)
+                        put(DatabaseHelper.COL_PERIODS_CLOSING_BALANCE_PAISE, 0L)
+                        put(DatabaseHelper.COL_PERIODS_STATUS, AccountPeriod.STATUS_CLOSED)
+                    }
+                    db.update(
+                        DatabaseHelper.TABLE_ACCOUNT_PERIODS,
+                        closeValues,
+                        "${DatabaseHelper.COL_PERIODS_ID} = ?",
+                        arrayOf(openPeriod.id.toString())
+                    )
+
+                    // 2. Insert settlement record
+                    val settleValues = ContentValues().apply {
+                        put(DatabaseHelper.COL_SETTLE_PERSON_ID, personId)
+                        put(DatabaseHelper.COL_SETTLE_PERIOD_ID, openPeriod.id)
+                        put(DatabaseHelper.COL_SETTLE_FINAL_BALANCE_PAISE, 0L)
+                        put(DatabaseHelper.COL_SETTLE_SETTLED_AT, settleTimestamp)
+                        put(DatabaseHelper.COL_SETTLE_NOTE, "Settled (Balance cleared to ₹0.00)")
+                    }
+                    db.insertOrThrow(DatabaseHelper.TABLE_SETTLEMENTS, null, settleValues)
+
+                    // 3. Start a brand new open period
+                    val newPeriodValues = ContentValues().apply {
+                        put(DatabaseHelper.COL_PERIODS_PERSON_ID, personId)
+                        put(DatabaseHelper.COL_PERIODS_STARTED_AT, settleTimestamp)
+                        put(DatabaseHelper.COL_PERIODS_OPENING_BALANCE_PAISE, 0L)
+                        put(DatabaseHelper.COL_PERIODS_STATUS, AccountPeriod.STATUS_OPEN)
+                    }
+                    db.insertOrThrow(DatabaseHelper.TABLE_ACCOUNT_PERIODS, null, newPeriodValues)
+
+                    db.setTransactionSuccessful()
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
         } finally {
             db.endTransaction()
         }

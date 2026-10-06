@@ -99,8 +99,6 @@ class AddTransactionActivity : AppCompatActivity() {
     private fun getSelectedTransactionType(): TransactionType {
         return when (binding.rgTransactionType.checkedRadioButtonId) {
             R.id.rbIOweThem -> TransactionType.I_OWE_THEM
-            R.id.rbPaymentReceived -> TransactionType.PAYMENT_RECEIVED
-            R.id.rbPaymentMade -> TransactionType.PAYMENT_MADE
             else -> TransactionType.THEY_OWE_ME
         }
     }
@@ -126,8 +124,7 @@ class AddTransactionActivity : AppCompatActivity() {
         val explanation = when (type) {
             TransactionType.THEY_OWE_ME -> "Effect: $formattedSigned ($personName will owe you ${CurrencyFormatter.formatRupees(parsedPaise)} more)"
             TransactionType.I_OWE_THEM -> "Effect: $formattedSigned (You will owe $personName ${CurrencyFormatter.formatRupees(parsedPaise)} more)"
-            TransactionType.PAYMENT_RECEIVED -> "Effect: $formattedSigned (Reduces what $personName owes you)"
-            TransactionType.PAYMENT_MADE -> "Effect: $formattedSigned (Reduces what you owe $personName)"
+            else -> "Effect: $formattedSigned"
         }
 
         binding.tvEffectPreview.text = explanation
