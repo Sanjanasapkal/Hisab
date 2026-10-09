@@ -12,6 +12,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import com.example.hisab.adapter.PersonAdapter
 import com.example.hisab.api.ApiClient
 import com.example.hisab.api.AppUpdateDto
@@ -21,8 +25,11 @@ import com.example.hisab.data.PersonRepository
 import com.example.hisab.data.SyncManager
 import com.example.hisab.databinding.ActivityMainBinding
 import com.example.hisab.databinding.DialogAddPersonBinding
+import com.example.hisab.databinding.DialogDownloadUpdateBinding
 import com.example.hisab.model.Person
 import com.example.hisab.util.CurrencyFormatter
+import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -294,10 +301,8 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("🚀 New Update Available (v${update.versionName})")
             .setMessage(message)
-            .setPositiveButton("Download Update") { _, _ ->
-                val downloadUrl = update.downloadUrl ?: "https://github.com/Sanjanasapkal/Hisab/raw/main/Hisab.apk"
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
-                startActivity(intent)
+            .setPositiveButton("Update Now") { _, _ ->
+                startInAppUpdateDownload(update)
             }
             .setNegativeButton(if (update.isMandatory == true) "Exit App" else "Later") { dialog, _ ->
                 if (update.isMandatory == true) {
@@ -308,6 +313,127 @@ class MainActivity : AppCompatActivity() {
             }
             .setCancelable(update.isMandatory != true)
             .show()
+    }
+
+    /**
+     * Downloads the APK update entirely inside the app with a real-time progress bar.
+     * Never redirects out to GitHub or external browser pages.
+     */
+    private fun startInAppUpdateDownload(update: AppUpdateDto) {
+        val downloadDialogBinding = DialogDownloadUpdateBinding.inflate(layoutInflater)
+        downloadDialogBinding.tvDownloadSubtitle.text = "Downloading v${update.versionName}..."
+
+        val downloadDialog = AlertDialog.Builder(this)
+            .setView(downloadDialogBinding.root)
+            .setCancelable(false)
+            .create()
+
+        downloadDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        downloadDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val apkUrl = update.downloadUrl ?: "https://hisab-zovn.onrender.com/api/app/download"
+            val targetDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: cacheDir
+            val apkFile = File(targetDir, "Hisab_v${update.versionName}.apk")
+
+            try {
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .build()
+
+                val request = okhttp3.Request.Builder()
+                    .url(apkUrl)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    throw Exception("HTTP ${response.code}: Download failed")
+                }
+
+                val body = response.body ?: throw Exception("Empty response body from update server")
+                val contentLength = body.contentLength()
+
+                body.byteStream().use { input ->
+                    java.io.FileOutputStream(apkFile).use { output ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        var totalBytesRead = 0L
+                        var lastProgressUpdate = 0L
+
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            totalBytesRead += bytesRead
+
+                            val now = System.currentTimeMillis()
+                            if (now - lastProgressUpdate > 100 || totalBytesRead == contentLength) {
+                                lastProgressUpdate = now
+                                val progress = if (contentLength > 0) ((totalBytesRead * 100) / contentLength).toInt() else 0
+                                val mbRead = totalBytesRead / (1024f * 1024f)
+                                val mbTotal = if (contentLength > 0) contentLength / (1024f * 1024f) else 0f
+
+                                withContext(Dispatchers.Main) {
+                                    downloadDialogBinding.progressBarDownload.isIndeterminate = contentLength <= 0
+                                    if (contentLength > 0) {
+                                        downloadDialogBinding.progressBarDownload.progress = progress
+                                        downloadDialogBinding.tvDownloadPercent.text = "$progress%"
+                                        downloadDialogBinding.tvDownloadSize.text = String.format(Locale.US, "%.1f MB / %.1f MB", mbRead, mbTotal)
+                                    } else {
+                                        downloadDialogBinding.tvDownloadSize.text = String.format(Locale.US, "%.1f MB downloaded", mbRead)
+                                    }
+                                }
+                            }
+                        }
+                        output.flush()
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    downloadDialogBinding.tvDownloadPercent.text = "100%"
+                    downloadDialogBinding.tvDownloadStatus.text = "Download complete! Opening installer..."
+                    downloadDialog.dismiss()
+                    promptApkInstall(apkFile)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    downloadDialog.dismiss()
+                    Toast.makeText(this@MainActivity, "In-app update download failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * Prompts the native Android package installer to install the downloaded update APK.
+     */
+    private fun promptApkInstall(apkFile: File) {
+        try {
+            if (!apkFile.exists()) {
+                Toast.makeText(this, "Downloaded file not found.", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!packageManager.canRequestPackageInstalls()) {
+                    Toast.makeText(this, "Please allow Hisab to install updates.", Toast.LENGTH_LONG).show()
+                    val permissionIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(permissionIntent)
+                }
+            }
+
+            val apkUri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", apkFile)
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            startActivity(installIntent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not open installer: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun showLatestVersionDialog(update: AppUpdateDto) {

@@ -12,6 +12,7 @@ build/
 
 # IDE files
 .idea/
+.kotlin/
 *.iws
 *.out
 

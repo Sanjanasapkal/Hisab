@@ -6,4 +6,7 @@ const appController = require('../controllers/appController');
 router.get('/version', appController.getLatestVersion);
 router.post('/version', appController.publishVersion);
 
+// Direct in-house APK download route (avoids external GitHub redirects)
+router.get('/download', appController.downloadApk);
+
 module.exports = router;

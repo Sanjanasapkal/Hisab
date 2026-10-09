@@ -1,20 +1,21 @@
+const https = require('https');
 const AppUpdate = require('../models/AppUpdate');
 
 /**
  * Default fallback metadata if MongoDB does not have an active record yet.
  */
 const DEFAULT_UPDATE_METADATA = {
-    versionCode: 3,
-    versionName: '1.1.1',
-    title: 'Hisab v1.1.1 — Performance & Ledger Improvements',
+    versionCode: 4,
+    versionName: '1.1.2',
+    title: 'Hisab v1.1.2 — In-App Updates & Stability Improvements',
     releaseDate: new Date('2026-10-09'),
     whatsNew: [
-        '✨ Smoother Registration: Improved account setup and instant OTP verification',
-        '📊 Clean Account History: Settled entries are now neatly organized in your History tab',
-        '⚡ Enhanced Cloud Sync: Faster and seamless background sync across your devices',
-        '🛠️ Performance & Reliability: Minor bug fixes and general stability improvements'
+        '🚀 Seamless In-App Updates: Download and install new updates directly within Hisab without leaving the app',
+        '✨ Enhanced Ledger Performance: Smoother account balance calculations and instant settlement sync',
+        '🔒 Cloud Backup & History: Secure, isolated accounting records with zero data overlap',
+        '🛠️ General Bug Fixes: Core stability improvements and responsive UI refinements'
     ],
-    downloadUrl: 'https://github.com/Sanjanasapkal/Hisab/raw/main/Hisab.apk',
+    downloadUrl: 'https://hisab-zovn.onrender.com/api/app/download',
     isMandatory: false,
     active: true
 };
@@ -93,7 +94,41 @@ async function publishVersion(req, res, next) {
     }
 }
 
+/**
+ * GET /api/app/download
+ * Streams the APK binary directly from the server with proper attachment headers.
+ * Users are never redirected to GitHub or third-party web pages.
+ */
+async function downloadApk(req, res, next) {
+    try {
+        const rawUrl = 'https://raw.githubusercontent.com/Sanjanasapkal/Hisab/main/Hisab.apk';
+
+        https.get(rawUrl, (upstream) => {
+            if (upstream.statusCode >= 300 && upstream.statusCode < 400 && upstream.headers.location) {
+                https.get(upstream.headers.location, (redirected) => {
+                    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+                    res.setHeader('Content-Disposition', 'attachment; filename="Hisab.apk"');
+                    if (redirected.headers['content-length']) {
+                        res.setHeader('Content-Length', redirected.headers['content-length']);
+                    }
+                    redirected.pipe(res);
+                }).on('error', next);
+            } else {
+                res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+                res.setHeader('Content-Disposition', 'attachment; filename="Hisab.apk"');
+                if (upstream.headers['content-length']) {
+                    res.setHeader('Content-Length', upstream.headers['content-length']);
+                }
+                upstream.pipe(res);
+            }
+        }).on('error', next);
+    } catch (error) {
+        next(error);
+    }
+}
+
 module.exports = {
     getLatestVersion,
-    publishVersion
+    publishVersion,
+    downloadApk
 };
