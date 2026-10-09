@@ -6,13 +6,13 @@ const AppUpdate = require('../models/AppUpdate');
 const DEFAULT_UPDATE_METADATA = {
     versionCode: 3,
     versionName: '1.1.1',
-    title: 'Hisab v1.1.1 — History Document Isolation & Registration Fix',
+    title: 'Hisab v1.1.1 — Performance & Ledger Improvements',
     releaseDate: new Date('2026-10-09'),
     whatsNew: [
-        '✨ Fixed registration validation: accounts now create reliably without errors',
-        '🛡️ Isolated MongoDB History Documents: settled accounting periods stay strictly in History',
-        '⚡ Active period protection: updating or syncing never pollutes the current account ledger',
-        '🔄 Auto-healing: cleans up any historical transactions that were previously placed in active period'
+        '✨ Smoother Registration: Improved account setup and instant OTP verification',
+        '📊 Clean Account History: Settled entries are now neatly organized in your History tab',
+        '⚡ Enhanced Cloud Sync: Faster and seamless background sync across your devices',
+        '🛠️ Performance & Reliability: Minor bug fixes and general stability improvements'
     ],
     downloadUrl: 'https://github.com/Sanjanasapkal/Hisab/raw/main/Hisab.apk',
     isMandatory: false,
