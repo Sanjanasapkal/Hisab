@@ -2,6 +2,7 @@ const Person = require('../models/Person');
 const AccountPeriod = require('../models/AccountPeriod');
 const Transaction = require('../models/Transaction');
 const Settlement = require('../models/Settlement');
+const History = require('../models/History');
 
 /**
  * GET /api/people
@@ -119,7 +120,8 @@ async function getPersonById(req, res, next) {
         // Get transactions for active open period
         const transactions = await Transaction.find({
             ownerUserId: req.userId,
-            periodId: openPeriod._id
+            periodId: openPeriod._id,
+            isSettled: false
         }).sort({ transactionDate: -1, createdAt: -1 });
 
         const transactionSum = transactions.reduce((acc, t) => acc + t.amountPaise, 0);
@@ -325,17 +327,78 @@ async function getPersonHistory(req, res, next) {
 
         const historyItems = await Promise.all(periods.map(async (period) => {
             let settlement = null;
+            let transactions = [];
+
             if (period.status === 'closed') {
                 settlement = await Settlement.findOne({
                     ownerUserId: req.userId,
                     periodId: period._id
                 });
-            }
 
-            const transactions = await Transaction.find({
-                ownerUserId: req.userId,
-                periodId: period._id
-            }).sort({ transactionDate: -1, createdAt: -1 });
+                // Check for existing dedicated History document in MongoDB
+                let historyDoc = await History.findOne({
+                    ownerUserId: req.userId,
+                    periodId: period._id
+                });
+
+                if (!historyDoc) {
+                    // Backfill / migrate closed period into History document
+                    const periodTx = await Transaction.find({
+                        ownerUserId: req.userId,
+                        periodId: period._id
+                    }).sort({ transactionDate: -1, createdAt: -1 });
+
+                    const finalBal = period.closingBalancePaise !== null
+                        ? period.closingBalancePaise
+                        : (period.openingBalancePaise || 0) + periodTx.reduce((s, t) => s + t.amountPaise, 0);
+
+                    historyDoc = await History.create({
+                        ownerUserId: req.userId,
+                        personId: person._id,
+                        periodId: period._id,
+                        settlementId: settlement ? settlement._id : null,
+                        startedAt: period.startedAt,
+                        closedAt: period.closedAt || new Date(),
+                        openingBalancePaise: period.openingBalancePaise || 0,
+                        closingBalancePaise: finalBal,
+                        finalBalancePaise: finalBal,
+                        settledAt: settlement ? settlement.settledAt : (period.closedAt || new Date()),
+                        note: settlement ? settlement.note : null,
+                        transactions: periodTx.map(t => ({
+                            originalTxId: t._id,
+                            amountPaise: t.amountPaise,
+                            reason: t.reason,
+                            transactionDate: t.transactionDate,
+                            notes: t.notes,
+                            clientLocalId: t.clientLocalId
+                        }))
+                    });
+
+                    // Mark individual transaction records as settled
+                    await Transaction.updateMany(
+                        { ownerUserId: req.userId, periodId: period._id },
+                        { $set: { isSettled: true } }
+                    );
+                }
+
+                transactions = historyDoc.transactions.map(t => ({
+                    _id: t._id || t.originalTxId,
+                    personId: person._id,
+                    periodId: period._id,
+                    amountPaise: t.amountPaise,
+                    reason: t.reason,
+                    transactionDate: t.transactionDate,
+                    notes: t.notes,
+                    clientLocalId: t.clientLocalId
+                }));
+            } else {
+                // Open period: active transactions only
+                transactions = await Transaction.find({
+                    ownerUserId: req.userId,
+                    periodId: period._id,
+                    isSettled: false
+                }).sort({ transactionDate: -1, createdAt: -1 });
+            }
 
             const txSum = transactions.reduce((acc, t) => acc + t.amountPaise, 0);
             const calculatedBalancePaise = period.closingBalancePaise !== null
@@ -350,12 +413,23 @@ async function getPersonHistory(req, res, next) {
             };
         }));
 
+        // Active open period transactions only
+        const openPeriod = periods.find(p => p.status === 'open');
+        const openTransactions = openPeriod
+            ? await Transaction.find({
+                ownerUserId: req.userId,
+                periodId: openPeriod._id,
+                isSettled: false
+            }).sort({ transactionDate: -1, createdAt: -1 })
+            : [];
+
         return res.status(200).json({
             success: true,
             data: {
                 person,
                 history: historyItems,
-                transactions: historyItems.flatMap(h => h.transactions)
+                openTransactions,
+                transactions: openTransactions
             }
         });
     } catch (error) {

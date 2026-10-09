@@ -111,7 +111,7 @@ object SyncManager {
             }
 
             // =========================================================================
-            // Step 3: Pull Remote Transactions for all people with remoteId
+            // Step 3: Pull Remote Ledger & History for all people with remoteId
             // =========================================================================
             val allLocalPeople = personRepo.getAllPeople()
             for (person in allLocalPeople) {
@@ -120,22 +120,95 @@ object SyncManager {
                 try {
                     val historyResp = apiService.getPersonHistory(remotePersonId)
                     if (historyResp.isSuccessful && historyResp.body()?.success == true) {
-                        val transactions = historyResp.body()?.data?.transactions.orEmpty()
-                        for (remoteTx in transactions) {
-                            val existingTx = txRepo.getTransactionByRemoteId(remoteTx.id)
-                            if (existingTx == null) {
-                                val txDate = parseIsoDate(remoteTx.transactionDate)
-                                txRepo.addTransaction(
+                        val data = historyResp.body()?.data
+
+                        // 3A: Pull and synchronize historical closed periods (MongoDB History documents)
+                        // This strictly isolates historical settled periods and heals any dirty records
+                        // that previously leaked into the open period.
+                        val historyList = data?.history.orEmpty()
+                        val closedTxRemoteIds = mutableSetOf<String>()
+
+                        for (historyItem in historyList) {
+                            if (historyItem.period?.status == "closed") {
+                                for (tx in historyItem.transactions.orEmpty()) {
+                                    closedTxRemoteIds.add(tx.id)
+                                }
+
+                                val startedAt = parseIsoDate(historyItem.period.startedAt)
+                                val closedAt = parseIsoDate(historyItem.period.closedAt)
+                                val settledAt = parseIsoDate(historyItem.settlement?.settledAt ?: historyItem.period.closedAt)
+                                val openingBal = historyItem.period.openingBalancePaise ?: 0L
+                                val closingBal = historyItem.settlement?.finalBalancePaise
+                                    ?: historyItem.period.closingBalancePaise ?: 0L
+                                val note = historyItem.settlement?.note
+
+                                txRepo.syncRemoteClosedPeriod(
                                     personId = person.id,
-                                    amountPaise = remoteTx.amountPaise,
-                                    reason = remoteTx.reason,
-                                    transactionDate = txDate,
-                                    notes = remoteTx.notes,
-                                    remoteId = remoteTx.id
+                                    startedAt = startedAt,
+                                    closedAt = closedAt,
+                                    openingBalancePaise = openingBal,
+                                    closingBalancePaise = closingBal,
+                                    settledAt = settledAt,
+                                    note = note,
+                                    transactions = historyItem.transactions.orEmpty()
                                 )
-                                txCount++
                             }
                         }
+
+                        // 3B: Pull ONLY active open-period transactions (strictly exclude any closed transaction)!
+                        val rawOpenTx = data?.openTransactions ?: data?.transactions.orEmpty()
+                        val openTransactions = rawOpenTx.filter { it.id !in closedTxRemoteIds }
+                        for (remoteTx in openTransactions) {
+                            val txDate = parseIsoDate(remoteTx.transactionDate)
+                            txRepo.syncRemoteOpenTransaction(
+                                personId = person.id,
+                                amountPaise = remoteTx.amountPaise,
+                                reason = remoteTx.reason,
+                                transactionDate = txDate,
+                                notes = remoteTx.notes,
+                                remoteId = remoteTx.id
+                            )
+                            txCount++
+                        }
+
+                        // 3C: Healing check: If SQLite's open period still holds transactions from closedTxRemoteIds,
+                        // move them immediately into their respective closed period.
+                        val localOpenTxs = txRepo.getOpenPeriodTransactions(person.id)
+                        for (localTx in localOpenTxs) {
+                            val rId = localTx.remoteId ?: continue
+                            if (rId in closedTxRemoteIds) {
+                                for (historyItem in historyList) {
+                                    if (historyItem.period?.status == "closed") {
+                                        if (historyItem.transactions.orEmpty().any { it.id == rId }) {
+                                            val startedAt = parseIsoDate(historyItem.period.startedAt)
+                                            val closedAt = parseIsoDate(historyItem.period.closedAt)
+                                            val settledAt = parseIsoDate(historyItem.settlement?.settledAt ?: historyItem.period.closedAt)
+                                            val openingBal = historyItem.period.openingBalancePaise ?: 0L
+                                            val closingBal = historyItem.settlement?.finalBalancePaise
+                                                ?: historyItem.period.closingBalancePaise ?: 0L
+                                            val note = historyItem.settlement?.note
+
+                                            val targetClosedPeriodId = txRepo.syncRemoteClosedPeriod(
+                                                personId = person.id,
+                                                startedAt = startedAt,
+                                                closedAt = closedAt,
+                                                openingBalancePaise = openingBal,
+                                                closingBalancePaise = closingBal,
+                                                settledAt = settledAt,
+                                                note = note,
+                                                transactions = historyItem.transactions.orEmpty()
+                                            )
+                                            if (targetClosedPeriodId != -1L) {
+                                                txRepo.moveTransactionToPeriod(localTx.id, targetClosedPeriodId)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3D: Auto-settle: If active period transactions balance out to ₹0.00, move to history
+                        txRepo.checkAndAutoSettleZeroBalance(person.id)
                     }
                 } catch (e: Exception) {
                     // Continue to next person

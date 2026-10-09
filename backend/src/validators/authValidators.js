@@ -53,6 +53,7 @@ function validateRegistration(data = {}) {
     }
 
     const fallbackName = email ? email.split('@')[0] : 'User';
+    const name = rawName || fallbackName;
     const preservedEmail = cleanEmail(email);
     const canonicalEmail = (validator.normalizeEmail(email, { gmail_remove_dots: true }) || preservedEmail).trim();
 

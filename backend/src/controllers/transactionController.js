@@ -2,6 +2,7 @@ const Transaction = require('../models/Transaction');
 const Person = require('../models/Person');
 const AccountPeriod = require('../models/AccountPeriod');
 const Settlement = require('../models/Settlement');
+const History = require('../models/History');
 
 /**
  * POST /api/transactions
@@ -87,13 +88,42 @@ async function addTransaction(req, res, next) {
             openPeriod.closingBalancePaise = 0;
             await openPeriod.save();
 
-            await Settlement.create({
+            const settlement = await Settlement.create({
                 ownerUserId: req.userId,
                 personId: person._id,
                 periodId: openPeriod._id,
                 finalBalancePaise: 0,
                 settledAt: txDate,
                 note: 'Settled (Balance cleared to ₹0.00)'
+            });
+
+            // Mark transactions in this period as settled
+            await Transaction.updateMany(
+                { ownerUserId: req.userId, periodId: openPeriod._id },
+                { $set: { isSettled: true } }
+            );
+
+            // Create dedicated History document in MongoDB to isolate historical data
+            await History.create({
+                ownerUserId: req.userId,
+                personId: person._id,
+                periodId: openPeriod._id,
+                settlementId: settlement._id,
+                startedAt: openPeriod.startedAt,
+                closedAt: txDate,
+                openingBalancePaise: openPeriod.openingBalancePaise || 0,
+                closingBalancePaise: 0,
+                finalBalancePaise: 0,
+                settledAt: txDate,
+                note: settlement.note,
+                transactions: allPeriodTx.map(t => ({
+                    originalTxId: t._id,
+                    amountPaise: t.amountPaise,
+                    reason: t.reason,
+                    transactionDate: t.transactionDate,
+                    notes: t.notes,
+                    clientLocalId: t.clientLocalId
+                }))
             });
 
             await AccountPeriod.create({
@@ -213,7 +243,37 @@ async function settleHisab(req, res, next) {
             clientLocalId: clientLocalId || null
         });
 
-        // 3. Open brand new period starting at 0 paise
+        // 3. Mark transactions in this period as settled
+        await Transaction.updateMany(
+            { ownerUserId: req.userId, periodId: openPeriod._id },
+            { $set: { isSettled: true } }
+        );
+
+        // 4. Create dedicated History document in MongoDB to isolate historical data
+        await History.create({
+            ownerUserId: req.userId,
+            personId: person._id,
+            periodId: openPeriod._id,
+            settlementId: settlement._id,
+            startedAt: openPeriod.startedAt,
+            closedAt: settleDate,
+            openingBalancePaise: openPeriod.openingBalancePaise || 0,
+            closingBalancePaise: finalBalance,
+            finalBalancePaise: finalBalance,
+            settledAt: settleDate,
+            note: note ? String(note).trim() : null,
+            transactions: transactions.map(t => ({
+                originalTxId: t._id,
+                amountPaise: t.amountPaise,
+                reason: t.reason,
+                transactionDate: t.transactionDate,
+                notes: t.notes,
+                clientLocalId: t.clientLocalId
+            })),
+            clientLocalId: clientLocalId || null
+        });
+
+        // 5. Open brand new period starting at 0 paise
         const newOpenPeriod = await AccountPeriod.create({
             ownerUserId: req.userId,
             personId: person._id,

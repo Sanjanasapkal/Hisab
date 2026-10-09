@@ -10,6 +10,7 @@ const Person = require('../src/models/Person');
 const AccountPeriod = require('../src/models/AccountPeriod');
 const Transaction = require('../src/models/Transaction');
 const Settlement = require('../src/models/Settlement');
+const History = require('../src/models/History');
 const { generateToken } = require('../src/services/tokenService');
 
 function apiRequest(app, options) {
@@ -295,6 +296,16 @@ test('Cloud Ledger & Strict User Data Isolation Suite', async (t) => {
         assert.equal(closedHistoryItem.transactions.length, 2); // The 2 transactions are PRESERVED!
         assert.equal(closedHistoryItem.settlement.note, 'Settled via Google Pay UPI');
         assert.equal(closedHistoryItem.calculatedBalancePaise, 19000);
+
+        // Verify that data.transactions has ZERO items (not polluting active period)
+        assert.equal(historyRes.body.data.transactions.length, 0);
+
+        // Verify dedicated History document exists in MongoDB
+        const historyDoc = await History.findOne({ personId: personAId, ownerUserId: userA._id });
+        assert.ok(historyDoc);
+        assert.equal(historyDoc.transactions.length, 2);
+        assert.equal(historyDoc.finalBalancePaise, 19000);
+        assert.equal(historyDoc.note, 'Settled via Google Pay UPI');
     });
 
     // Cleanup
@@ -302,6 +313,7 @@ test('Cloud Ledger & Strict User Data Isolation Suite', async (t) => {
     await AccountPeriod.deleteMany({ ownerUserId: { $in: [userA._id, userB._id] } });
     await Transaction.deleteMany({ ownerUserId: { $in: [userA._id, userB._id] } });
     await Settlement.deleteMany({ ownerUserId: { $in: [userA._id, userB._id] } });
+    await History.deleteMany({ ownerUserId: { $in: [userA._id, userB._id] } });
     await User.deleteMany({ normalizedEmail: { $in: [emailA, emailB] } });
 
     await disconnectDatabase();

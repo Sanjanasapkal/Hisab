@@ -49,6 +49,11 @@ const transactionSchema = new mongoose.Schema({
     clientLocalId: {
         type: Number,
         default: null
+    },
+    isSettled: {
+        type: Boolean,
+        default: false,
+        index: true
     }
 }, {
     timestamps: true

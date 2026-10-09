@@ -3,6 +3,7 @@ package com.example.hisab.data
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
+import com.example.hisab.api.RemoteTransactionDto
 import com.example.hisab.model.AccountPeriod
 import com.example.hisab.model.PeriodHistoryItem
 import com.example.hisab.model.Settlement
@@ -491,6 +492,218 @@ class TransactionRepository(context: Context) {
             }
         }
         return list
+    }
+
+    /**
+     * Synchronizes a historical closed accounting period and its settlement from MongoDB Atlas into SQLite.
+     * Ensures that transactions in this historical period belong STRICTLY to this closed period
+     * and NEVER pollute the active open period.
+     *
+     * Healing feature: If any of these transactions were previously mistakenly inserted into the
+     * active open period (e.g. from an earlier sync bug), they are automatically moved to this closed period!
+     */
+    fun syncRemoteClosedPeriod(
+        personId: Long,
+        startedAt: Long,
+        closedAt: Long,
+        openingBalancePaise: Long,
+        closingBalancePaise: Long,
+        settledAt: Long,
+        note: String?,
+        transactions: List<RemoteTransactionDto>
+    ): Long {
+        val db = dbHelper.writableDatabase
+        db.beginTransaction()
+        try {
+            var closedPeriodId: Long = -1L
+
+            // 1A. Check if any transaction in this closed period is already associated with an existing closed period in SQLite
+            for (remoteTx in transactions) {
+                val existing = getTransactionByRemoteId(remoteTx.id)
+                if (existing != null) {
+                    val pCursor = db.query(
+                        DatabaseHelper.TABLE_ACCOUNT_PERIODS,
+                        null,
+                        "${DatabaseHelper.COL_PERIODS_ID} = ? AND ${DatabaseHelper.COL_PERIODS_STATUS} = ?",
+                        arrayOf(existing.periodId.toString(), AccountPeriod.STATUS_CLOSED),
+                        null, null, null, "1"
+                    )
+                    pCursor.use {
+                        if (it.moveToFirst()) {
+                            closedPeriodId = existing.periodId
+                        }
+                    }
+                    if (closedPeriodId != -1L) break
+                }
+            }
+
+            // 1B. Check if a settlement exists matching settledAt (within 60s)
+            if (closedPeriodId == -1L) {
+                val settleCursor = db.query(
+                    DatabaseHelper.TABLE_SETTLEMENTS,
+                    null,
+                    "${DatabaseHelper.COL_SETTLE_PERSON_ID} = ? AND ABS(${DatabaseHelper.COL_SETTLE_SETTLED_AT} - ?) < 60000",
+                    arrayOf(personId.toString(), settledAt.toString()),
+                    null, null, null, "1"
+                )
+                settleCursor.use {
+                    if (it.moveToFirst()) {
+                        closedPeriodId = it.getLong(it.getColumnIndexOrThrow(DatabaseHelper.COL_SETTLE_PERIOD_ID))
+                    }
+                }
+            }
+
+            // 1C. Check if an account period exists matching closedAt (within 60s)
+            if (closedPeriodId == -1L) {
+                val periodCursor = db.query(
+                    DatabaseHelper.TABLE_ACCOUNT_PERIODS,
+                    null,
+                    "${DatabaseHelper.COL_PERIODS_PERSON_ID} = ? AND ${DatabaseHelper.COL_PERIODS_STATUS} = ? AND ABS(${DatabaseHelper.COL_PERIODS_CLOSED_AT} - ?) < 60000",
+                    arrayOf(personId.toString(), AccountPeriod.STATUS_CLOSED, closedAt.toString()),
+                    null, null, null, "1"
+                )
+                periodCursor.use {
+                    if (it.moveToFirst()) {
+                        closedPeriodId = it.getLong(it.getColumnIndexOrThrow(DatabaseHelper.COL_PERIODS_ID))
+                    }
+                }
+            }
+
+            // 1D. If not found, create new closed period & settlement
+            if (closedPeriodId == -1L) {
+                val periodValues = ContentValues().apply {
+                    put(DatabaseHelper.COL_PERIODS_PERSON_ID, personId)
+                    put(DatabaseHelper.COL_PERIODS_STARTED_AT, startedAt)
+                    put(DatabaseHelper.COL_PERIODS_CLOSED_AT, closedAt)
+                    put(DatabaseHelper.COL_PERIODS_OPENING_BALANCE_PAISE, openingBalancePaise)
+                    put(DatabaseHelper.COL_PERIODS_CLOSING_BALANCE_PAISE, closingBalancePaise)
+                    put(DatabaseHelper.COL_PERIODS_STATUS, AccountPeriod.STATUS_CLOSED)
+                }
+                closedPeriodId = db.insertOrThrow(DatabaseHelper.TABLE_ACCOUNT_PERIODS, null, periodValues)
+
+                val settleValues = ContentValues().apply {
+                    put(DatabaseHelper.COL_SETTLE_PERSON_ID, personId)
+                    put(DatabaseHelper.COL_SETTLE_PERIOD_ID, closedPeriodId)
+                    put(DatabaseHelper.COL_SETTLE_FINAL_BALANCE_PAISE, closingBalancePaise)
+                    put(DatabaseHelper.COL_SETTLE_SETTLED_AT, settledAt)
+                    put(DatabaseHelper.COL_SETTLE_NOTE, note)
+                }
+                db.insertOrThrow(DatabaseHelper.TABLE_SETTLEMENTS, null, settleValues)
+            }
+
+            // 2. Reconcile transactions: ensure each transaction belongs to closedPeriodId!
+            for (remoteTx in transactions) {
+                val existingTx = getTransactionByRemoteId(remoteTx.id)
+                if (existingTx != null) {
+                    // HEALING STEP: Move this transaction to its proper closed period!
+                    if (existingTx.periodId != closedPeriodId) {
+                        val updateValues = ContentValues().apply {
+                            put(DatabaseHelper.COL_TRANS_PERIOD_ID, closedPeriodId)
+                            put(DatabaseHelper.COL_TRANS_UPDATED_AT, System.currentTimeMillis())
+                        }
+                        db.update(
+                            DatabaseHelper.TABLE_TRANSACTIONS,
+                            updateValues,
+                            "${DatabaseHelper.COL_TRANS_ID} = ?",
+                            arrayOf(existingTx.id.toString())
+                        )
+                    }
+                } else {
+                    val txDate = parseIsoDate(remoteTx.transactionDate)
+                    val txValues = ContentValues().apply {
+                        put(DatabaseHelper.COL_TRANS_PERSON_ID, personId)
+                        put(DatabaseHelper.COL_TRANS_PERIOD_ID, closedPeriodId)
+                        put(DatabaseHelper.COL_TRANS_AMOUNT_PAISE, remoteTx.amountPaise)
+                        put(DatabaseHelper.COL_TRANS_REASON, remoteTx.reason.trim())
+                        put(DatabaseHelper.COL_TRANS_TRANSACTION_DATE, txDate)
+                        put(DatabaseHelper.COL_TRANS_CREATED_AT, txDate)
+                        put(DatabaseHelper.COL_TRANS_UPDATED_AT, txDate)
+                        put(DatabaseHelper.COL_TRANS_NOTES, remoteTx.notes?.trim()?.ifEmpty { null })
+                        put(DatabaseHelper.COL_TRANS_REMOTE_ID, remoteTx.id)
+                    }
+                    db.insertOrThrow(DatabaseHelper.TABLE_TRANSACTIONS, null, txValues)
+                }
+            }
+
+            db.setTransactionSuccessful()
+            return closedPeriodId
+        } catch (e: Exception) {
+            return -1L
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Synchronizes an active transaction that belongs strictly to the open period.
+     */
+    fun syncRemoteOpenTransaction(
+        personId: Long,
+        amountPaise: Long,
+        reason: String,
+        transactionDate: Long,
+        notes: String?,
+        remoteId: String
+    ): Long {
+        val existingTx = getTransactionByRemoteId(remoteId)
+        val openPeriod = getOrCreateOpenPeriod(personId)
+
+        if (existingTx != null) {
+            // Transaction already exists locally; NEVER pull an existing transaction into the open period!
+            return existingTx.id
+        }
+
+        // Insert new into open period
+        val db = dbHelper.writableDatabase
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put(DatabaseHelper.COL_TRANS_PERSON_ID, personId)
+            put(DatabaseHelper.COL_TRANS_PERIOD_ID, openPeriod.id)
+            put(DatabaseHelper.COL_TRANS_AMOUNT_PAISE, amountPaise)
+            put(DatabaseHelper.COL_TRANS_REASON, reason.trim())
+            put(DatabaseHelper.COL_TRANS_TRANSACTION_DATE, transactionDate)
+            put(DatabaseHelper.COL_TRANS_CREATED_AT, now)
+            put(DatabaseHelper.COL_TRANS_UPDATED_AT, now)
+            put(DatabaseHelper.COL_TRANS_NOTES, notes?.trim()?.ifEmpty { null })
+            put(DatabaseHelper.COL_TRANS_REMOTE_ID, remoteId)
+        }
+        return db.insertOrThrow(DatabaseHelper.TABLE_TRANSACTIONS, null, values)
+    }
+
+    /**
+     * Moves a transaction to a specific period ID.
+     */
+    fun moveTransactionToPeriod(transactionId: Long, targetPeriodId: Long) {
+        val db = dbHelper.writableDatabase
+        val values = ContentValues().apply {
+            put(DatabaseHelper.COL_TRANS_PERIOD_ID, targetPeriodId)
+            put(DatabaseHelper.COL_TRANS_UPDATED_AT, System.currentTimeMillis())
+        }
+        db.update(
+            DatabaseHelper.TABLE_TRANSACTIONS,
+            values,
+            "${DatabaseHelper.COL_TRANS_ID} = ?",
+            arrayOf(transactionId.toString())
+        )
+    }
+
+    private fun parseIsoDate(isoString: String?): Long {
+        if (isoString.isNullOrBlank()) return System.currentTimeMillis()
+        return try {
+            val format = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+            format.parse(isoString)?.time ?: System.currentTimeMillis()
+        } catch (e: Exception) {
+            try {
+                val formatSec = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                formatSec.parse(isoString)?.time ?: System.currentTimeMillis()
+            } catch (e2: Exception) {
+                System.currentTimeMillis()
+            }
+        }
     }
 
     private fun cursorToTransaction(c: Cursor): Transaction {

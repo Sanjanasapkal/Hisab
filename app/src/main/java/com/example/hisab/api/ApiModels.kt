@@ -135,9 +135,34 @@ data class RemoteTransactionDto(
     @SerializedName("createdAt") val createdAt: String? = null
 )
 
+data class RemoteAccountPeriodDto(
+    @SerializedName("_id") val id: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("startedAt") val startedAt: String? = null,
+    @SerializedName("closedAt") val closedAt: String? = null,
+    @SerializedName("openingBalancePaise") val openingBalancePaise: Long? = null,
+    @SerializedName("closingBalancePaise") val closingBalancePaise: Long? = null
+)
+
+data class RemoteSettlementDto(
+    @SerializedName("_id") val id: String? = null,
+    @SerializedName("finalBalancePaise") val finalBalancePaise: Long = 0L,
+    @SerializedName("settledAt") val settledAt: String? = null,
+    @SerializedName("note") val note: String? = null
+)
+
+data class HistoryPeriodDto(
+    @SerializedName("period") val period: RemoteAccountPeriodDto?,
+    @SerializedName("settlement") val settlement: RemoteSettlementDto?,
+    @SerializedName("transactions") val transactions: List<RemoteTransactionDto>?,
+    @SerializedName("calculatedBalancePaise") val calculatedBalancePaise: Long? = null
+)
+
 data class PersonHistoryResponseData(
     @SerializedName("person") val person: PersonDto?,
-    @SerializedName("transactions") val transactions: List<RemoteTransactionDto>?
+    @SerializedName("history") val history: List<HistoryPeriodDto>? = null,
+    @SerializedName("openTransactions") val openTransactions: List<RemoteTransactionDto>? = null,
+    @SerializedName("transactions") val transactions: List<RemoteTransactionDto>? = null
 )
 
 data class TransactionResponseData(
